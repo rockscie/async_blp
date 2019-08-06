@@ -109,6 +109,27 @@ class SessionOptions:
         """
 
 
+class Service:
+
+    def createRequest(self, requestName):
+        return Request()
+
+
+class Request:
+
+    def set(self, key, value):
+        pass
+
+    def getElement(self):
+        return Element()
+
+
+class Element:
+
+    def appendValue(self):
+        pass
+
+
 class Event:
     """
     contains Message and type

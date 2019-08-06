@@ -1,5 +1,5 @@
 """
-For test Handler we must env_test for emulate Bloomberg
+For test Handler we must use env_test for emulate Bloomberg
 """
 
 import pytest
@@ -10,11 +10,11 @@ from async_blp.env_test import Session
 from async_blp.handler_refdata import HandlerRef
 
 
-@pytest.mark.run_loop
+@pytest.mark.asyncio
 @pytest.mark.timeout(5)
 async def test_handler_async():
     """
-    Just open service and wait  RESPONSE
+    Just open service and wait for RESPONSE
     """
     handler = HandlerRef()
     event_ = handler.complete_event
@@ -23,11 +23,11 @@ async def test_handler_async():
     assert event_.is_set()
 
 
-@pytest.mark.run_loop
+@pytest.mark.asyncio
 @pytest.mark.timeout(5)
 async def test_call_handler():
     """
-    only handler know when we can open Service
+    only handler knows when we can open Service
     """
     handler = HandlerRef(start_session=False)
     handler(Event(
