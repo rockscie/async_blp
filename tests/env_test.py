@@ -1,15 +1,32 @@
+"""
+Emulate blpapi for test
+please  use
+try:
+    import blpapi
+except:
+    from tests import env_test as blpapi
+"""
+
 import threading
 import time
 from typing import List
 
+from async_blp.abs_handler import AbcHandler
 
-class Msg:
+
+class Message:
+    """
+    contain low level Bloomberg data
+    """
 
     def __init__(self, value, name):
         self.value = value
         self._name = name
 
     def asElement(self):
+        """
+        blpapi Message must be cast
+        """
         return self
 
     def name(self):
@@ -17,22 +34,28 @@ class Msg:
 
 
 class Session:
+    """
+    send events to the handler
+    """
 
-    def __init__(self, options, eventHandler):
+    def __init__(self,
+                 options=None,
+                 eventHandler=None):
+
         self.handler = eventHandler
         self.events = [
             Event(
-                type=Event.RESPONSE,
+                type_=Event.RESPONSE,
                 msgs=[
-                    Msg(value=0, name='test'),
-                    Msg(value=0, name='test'),
+                    Message(value=0, name='test'),
+                    Message(value=0, name='test'),
                     ]
                 ),
             Event(
-                type=Event.OTHER,
+                type_=Event.OTHER,
                 msgs=[
-                    Msg(value=0, name='SessionStarted'),
-                    Msg(value=0, name='ServiceOpened'),
+                    Message(value=0, name='SessionStarted'),
+                    Message(value=0, name='ServiceOpened'),
                     ]
                 )
             ]
@@ -42,8 +65,10 @@ class Session:
                                   args=(self.handler,))
         thread.start()
 
-    # todo add abc handler
-    def _async_start(self, handler):
+    def _async_start(self, handler: AbcHandler):
+        """
+        to correct work las event type must  Event.RESPONSE
+        """
         while self.events:
             time.sleep(0.01)
             event = self.events.pop()
@@ -70,8 +95,8 @@ class Event:
     def __iter__(self):
         return iter(self.msgs)
 
-    def __init__(self, type: str, msgs: List[Msg]):
-        self._type = type
+    def __init__(self, type_: str, msgs: List[Message]):
+        self._type = type_
         self.msgs = msgs
 
     def eventType(self):
