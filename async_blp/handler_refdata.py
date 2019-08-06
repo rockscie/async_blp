@@ -1,30 +1,30 @@
 """
-Handlers create own session and have all events and queues to async work with
-Bloomberg
+File contains handler for ReferenceDataRequest
 """
 
 import asyncio
 from typing import List
 
-from async_blp.abs_handler import AbcHandler
+from async_blp.abs_handler import AbsHandler
 
 try:
     import blpapi
 except ImportError:
-    from tests import env_test as blpapi
+    from async_blp import env_test as blpapi
 
 
-class HandlerRef(AbcHandler):
+class HandlerRef(AbsHandler):
     """
-    Handler get response event from Bloomberg from other thead and work async
-    with it
+    Handler gets response events from Bloomberg from other thread, then
+    asynchronously processes it. Each handler opens its own session
     """
     service_name = "//blp/refdata"
     request_name = "ReferenceDataRequest"
 
     def __init__(self, start_session=True):
         """
-        important startAsync before doing smt else
+        It is important to start session with startAsync before doing anything
+        else
         """
         super().__init__()
         self.requests = {}
@@ -49,7 +49,7 @@ class HandlerRef(AbcHandler):
 
     async def _send_requests(self):
         """
-        Find correct moment to send requests
+        Wait until session is started and service is opened, then send requests
         """
         await self.connection.wait()
         service = self.session.getService(self.service_name)
@@ -59,7 +59,7 @@ class HandlerRef(AbcHandler):
 
     def __call__(self, event: blpapi.Event, session: blpapi.Session):
         """
-        work with response event from Bloomberg
+        Process response event from Bloomberg
         """
         print('got type ', event.eventType())
         for msg in event:

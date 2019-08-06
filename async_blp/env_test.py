@@ -3,7 +3,7 @@ Emulate blpapi for test
 please  use
 try:
     import blpapi
-except:
+except ImportError:
     from tests import env_test as blpapi
 """
 
@@ -11,12 +11,12 @@ import threading
 import time
 from typing import List
 
-from async_blp.abs_handler import AbcHandler
+from async_blp.abs_handler import AbsHandler
 
 
 class Message:
     """
-    contain low level Bloomberg data
+    Contains low-level Bloomberg data
     """
 
     def __init__(self, value, name):
@@ -32,7 +32,7 @@ class Message:
 
     def name(self):
         """
-        blpapi use method instead attr
+        blpapi uses method instead of attributes
         """
         return self._name
 
@@ -68,15 +68,15 @@ class Session:
     # pylint: disable=invalid-name
     def startAsync(self):
         """
-        async Bloomberg use thead
+        Start Bloomberg session in a separate thread
         """
         thread = threading.Thread(target=self._async_start,
                                   args=(self.handler,))
         thread.start()
 
-    def _async_start(self, handler: AbcHandler):
+    def _async_start(self, handler: AbsHandler):
         """
-        to correct work las event type must  Event.RESPONSE
+        last event type must be Event.RESPONSE
         """
         while self.events:
             time.sleep(0.01)
@@ -84,27 +84,28 @@ class Session:
             print(f'Calling handler with {event}')
             handler(event, handler.session)
 
+    # pylint: disable=invalid-name
     def openServiceAsync(self, *args, **kwargs):
         """
-        before you can get  Service you need open it
+        before you can get Service you need to open it
         """
 
 
 class SessionOptions:
     """
-    blpapi connecting Options
+    blpapi connection Options
     """
 
     # pylint: disable=invalid-name
     def setServerHost(self, *args, **kwargs):
         """
-        for terminal 127.0.0.1 only
+        Bloomberg Terminal supports only 127.0.0.1
         """
 
     # pylint: disable=invalid-name
     def setServerPort(self, *args, **kwargs):
         """
-        8194 - standard
+        8194 - default port
         """
 
 
@@ -125,6 +126,6 @@ class Event:
     # pylint: disable=invalid-name
     def eventType(self):
         """
-        blpapi use method instead attr
+        blpapi uses method instead of attributes
         """
         return self._type

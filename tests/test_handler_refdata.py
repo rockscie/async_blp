@@ -4,10 +4,10 @@ For test Handler we must env_test for emulate Bloomberg
 
 import pytest
 
+from async_blp.env_test import Event
+from async_blp.env_test import Message
+from async_blp.env_test import Session
 from async_blp.handler_refdata import HandlerRef
-from tests.env_test import Event
-from tests.env_test import Message
-from tests.env_test import Session
 
 
 @pytest.mark.run_loop
