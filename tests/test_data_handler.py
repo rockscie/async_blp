@@ -1,6 +1,3 @@
-import asyncio
-import time
-
 import pytest
 
 from async_blp.handler_refdata import HandlerRef
@@ -13,4 +10,3 @@ async def test_main_acync():
     event_ = handler.event
     await event_.wait()
     assert event_.is_set()
-

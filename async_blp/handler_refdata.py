@@ -4,7 +4,7 @@ from typing import List
 try:
     import blpapi
 except:
-    import env_test as blpapi
+    from tests import env_test as blpapi
 
 
 class HandlerRef:
