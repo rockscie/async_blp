@@ -3,9 +3,11 @@ File contains handler for ReferenceDataRequest
 """
 
 import asyncio
+from typing import Dict
 from typing import List
 
 from async_blp.abs_handler import AbsHandler
+from async_blp.requests import ReferenceDataRequest
 
 try:
     import blpapi
@@ -27,21 +29,23 @@ class HandlerRef(AbsHandler):
         else
         """
         super().__init__()
-        self.requests = {}
+
+        self.requests: Dict[str, ReferenceDataRequest] = {}
         self.connection = asyncio.Event()
         self.loop = asyncio.get_running_loop()
         self.complete_event: asyncio.Event = asyncio.Event()
+        self.__result = []
+
         session_options = blpapi.SessionOptions()
         session_options.setServerHost("localhost")
         session_options.setServerPort(8194)
-        self.__result = []
 
         self.session = blpapi.Session(options=session_options,
                                       eventHandler=self)
         if start_session:
             self.session.startAsync()
 
-    def send_requests(self, requests: List):
+    def send_requests(self, requests: List[ReferenceDataRequest]):
         """
         save and prepare requests
         """
@@ -53,8 +57,11 @@ class HandlerRef(AbsHandler):
         """
         await self.connection.wait()
         service = self.session.getService(self.service_name)
-        for _, request_obj in self.requests.items():
-            request_obj.send_requests(service)
+
+        for request in self.requests.values():
+            blp_request = request.create(service)
+            self.session.sendRequest(blp_request)
+
         self.complete_event.clear()
 
     def __call__(self, event: blpapi.Event, session: blpapi.Session):

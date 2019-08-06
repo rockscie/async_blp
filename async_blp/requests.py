@@ -6,12 +6,12 @@ from typing import Optional
 try:
     import blpapi
 except ImportError:
-    pass
+    from async_blp import env_test as blpapi
 
 
 class SecurityIdType(enum.Enum):
     """
-    Some of the possible security identifiers types. For more information see
+    Some of the possible security identifier types. For more information see
     https://www.bloomberg.com/professional/support/api-library/
     """
     ticker = '/ticker/'
