@@ -11,7 +11,7 @@ from async_blp.abs_handler import AbcHandler
 try:
     import blpapi
 except ImportError:
-    from tests import env_test as blpapi
+    from async_blp import env_test as blpapi
 
 
 class HandlerRef(AbcHandler):

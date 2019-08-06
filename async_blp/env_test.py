@@ -3,7 +3,7 @@ Emulate blpapi for test
 please  use
 try:
     import blpapi
-except:
+except ImportError:
     from tests import env_test as blpapi
 """
 
