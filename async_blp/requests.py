@@ -10,6 +10,10 @@ except ImportError:
 
 
 class SecurityIdType(enum.Enum):
+    """
+    Some of the possible security identifiers types. For more information see
+    https://www.bloomberg.com/professional/support/api-library/
+    """
     ticker = '/ticker/'
     isin = '/isin/'
     cusip = '/cusip/'
@@ -25,13 +29,16 @@ class SecurityIdType(enum.Enum):
 
 
 class ReferenceDataRequest:
+    """
+    Convenience wrapper around Bloomberg's ReferenceDataRequest
+    """
     service_name = "//blp/refdata"
     request_name = "ReferenceDataRequest"
 
     def __init__(self,
                  securities: List[str],
                  fields: List[str],
-                 security_id_type: SecurityIdType = None,
+                 security_id_type: Optional[SecurityIdType] = None,
                  overrdies: Optional[Dict] = None):
 
         self.securities = securities
