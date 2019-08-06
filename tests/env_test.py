@@ -23,6 +23,7 @@ class Message:
         self.value = value
         self._name = name
 
+    # pylint: disable=invalid-name
     def asElement(self):
         """
         blpapi Message must be cast
@@ -30,6 +31,9 @@ class Message:
         return self
 
     def name(self):
+        """
+        blpapi use method instead attr
+        """
         return self._name
 
 
@@ -42,6 +46,7 @@ class Session:
                  options=None,
                  eventHandler=None):
 
+        self.options = options
         self.handler = eventHandler
         self.events = [
             Event(
@@ -60,7 +65,11 @@ class Session:
                 )
             ]
 
+    # pylint: disable=invalid-name
     def startAsync(self):
+        """
+        async Bloomberg use thead
+        """
         thread = threading.Thread(target=self._async_start,
                                   args=(self.handler,))
         thread.start()
@@ -76,19 +85,33 @@ class Session:
             handler(event, handler.session)
 
     def openServiceAsync(self, *args, **kwargs):
-        pass
+        """
+        before you can get  Service you need open it
+        """
 
 
 class SessionOptions:
+    """
+    blpapi connecting Options
+    """
 
+    # pylint: disable=invalid-name
     def setServerHost(self, *args, **kwargs):
-        pass
+        """
+        for terminal 127.0.0.1 only
+        """
 
+    # pylint: disable=invalid-name
     def setServerPort(self, *args, **kwargs):
-        pass
+        """
+        8194 - standard
+        """
 
 
 class Event:
+    """
+    contains Message and type
+    """
     RESPONSE = 'RESPONSE'
     OTHER = "other"
 
@@ -99,5 +122,9 @@ class Event:
         self._type = type_
         self.msgs = msgs
 
+    # pylint: disable=invalid-name
     def eventType(self):
+        """
+        blpapi use method instead attr
+        """
         return self._type

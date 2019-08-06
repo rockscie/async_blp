@@ -3,6 +3,7 @@ abstract Handler for typing
 """
 
 import abc
+from typing import List
 
 
 class AbcHandler(metaclass=abc.ABCMeta):
@@ -18,7 +19,7 @@ class AbcHandler(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def send_requests(self):
+    def send_requests(self, requests: List):
         """
         save and prepare requests
         """
