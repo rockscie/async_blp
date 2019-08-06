@@ -6,7 +6,7 @@ import abc
 from typing import List
 
 
-class AbcHandler(metaclass=abc.ABCMeta):
+class AbsHandler(metaclass=abc.ABCMeta):
     """
     All Handler must have session and __call__
     """
