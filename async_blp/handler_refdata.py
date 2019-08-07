@@ -34,7 +34,7 @@ class HandlerRef(AbsHandler):
         self.connection = asyncio.Event()
         self.loop = asyncio.get_running_loop()
         self.complete_event: asyncio.Event = asyncio.Event()
-        self.__result = []
+        self.queue = asyncio.Queue()
 
         session_options = blpapi.SessionOptions()
         session_options.setServerHost("localhost")
@@ -70,12 +70,22 @@ class HandlerRef(AbsHandler):
         """
         print('got type ', event.eventType())
         for msg in event:
-            self.__result.append(msg)
+
             if msg.asElement().name() == 'SessionStarted':
                 session.openServiceAsync(self.service_name)
+
             if msg.asElement().name() == 'ServiceOpened':
                 self.loop.call_soon_threadsafe(lambda event_: event_.set(),
                                                self.connection)
+
             if event.eventType() == blpapi.Event.RESPONSE:
-                self.loop.call_soon_threadsafe(lambda event_: event_.set(),
-                                               self.complete_event)
+                corr_id = '1'
+                request = self.requests[corr_id]
+
+                self.loop.call_soon_threadsafe(
+                    lambda msg: request.msg_queue.put(msg),
+                    msg)
+
+                self.loop.call_soon_threadsafe(
+                    lambda msg: request.msg_queue.put('END'),
+                    msg)

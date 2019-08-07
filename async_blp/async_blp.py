@@ -19,6 +19,5 @@ async def get_reference_data(
 
     handler = HandlerRef()
     handler.send_requests([request])
-    await handler.complete_event.wait()
+    return await request.process()
 
-    # todo process received data

@@ -1,3 +1,4 @@
+import asyncio
 import enum
 from typing import Dict
 from typing import List
@@ -45,6 +46,16 @@ class ReferenceDataRequest:
         self.fields = fields
         self.security_id_type = security_id_type
         self.overrdies = overrdies or {}
+        self.msg_queue = asyncio.Queue()
+
+    async def process(self):
+        msg = ''
+
+        while msg != 'END':
+            msg = await self.msg_queue.get()
+            ...
+
+        return Response()
 
     def create(self, service: blpapi.Service) -> blpapi.Request:
         request = service.createRequest(self.request_name)
