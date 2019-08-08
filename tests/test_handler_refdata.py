@@ -5,13 +5,16 @@ import asyncio
 
 import pytest
 
+from async_blp.env_test import Element
+from async_blp.env_test import Event
+from async_blp.env_test import Message
 from async_blp.env_test import SessionOptions
 from async_blp.handler_refdata import HandlerRef
 from async_blp.requests import ReferenceDataRequest
 
 
 @pytest.fixture()
-def session_options() -> SessionOptions():
+def session_options_bl() -> SessionOptions():
     """
     for test not important
     """
@@ -21,29 +24,93 @@ def session_options() -> SessionOptions():
     return session_options_
 
 
-@pytest.mark.asyncio
-@pytest.mark.timeout(5)
-async def test_handler_async(session_options):
-    """
-    Just open service and wait for RESPONSE
-    """
+@pytest.fixture()
+def request_bl():
     field_name = 'PX_LAST'
     security_id = 'F Equity'
+    return ReferenceDataRequest([security_id], [field_name])
 
-    request = ReferenceDataRequest([security_id], [field_name])
-    handler = HandlerRef(session_options)
-    asyncio.create_task(handler.send_requests([request]))
-    asyncio.create_task(request.process())
-    result = await request.process()
-    assert True
+
+@pytest.fixture()
+def element_daily_reached():
+    return Element(name='subcategory', value='DAILY_LIMIT_REACHED')
+
+
+@pytest.fixture()
+def element_monthly_reached():
+    return Element(name='subcategory', value='MONTHLY_LIMIT_REACHED')
+
+
+@pytest.fixture()
+def msg_daily_reached():
+    return Message(name="responseError",
+                   value='',
+                   children={
+                       "responseError": element_daily_reached
+                       }
+                   )
+
+
+@pytest.fixture()
+def error_event(msg_daily_reached):
+    return Event(type_=Event.RESPONSE,
+                 msgs=[
+                     msg_daily_reached,
+                     ],
+                 )
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(5)
-async def test_call_handler(session_options):
+@pytest.mark.timeout(1)
+class TestHandlerAsync:
     """
-    only handler knows when we can open Service
+    test all async methods
     """
-    handler = HandlerRef(session_options)
-    await handler.connection.wait()
-    assert handler.connection.is_set()
+
+    async def test_start_connection(self, session_options_bl):
+        """
+        we try connect in init
+        """
+        handler = HandlerRef(session_options_bl)
+        await handler.connection.wait()
+        assert handler.connection.is_set()
+
+    async def test_send(self, session_options_bl, request_bl):
+        """
+        only handler knows when we can open Service
+        """
+        handler = HandlerRef(session_options_bl)
+        await handler.send_requests([request_bl])
+        await handler.send_requests([request_bl])
+        assert handler.requests
+        assert len(handler.requests) > 1
+
+    async def test_get_service(self, session_options_bl):
+        """
+        only handler knows when we can open Service
+        """
+        handler = HandlerRef(session_options_bl)
+        assert await handler._get_service('test')
+        assert handler.services['test'].is_set()
+
+    async def test_call_limit(self, session_options_bl,
+                              request_bl,
+                              msg_daily_reached,):
+        """
+        only handler knows when we can open Service
+        """
+        handler = HandlerRef(session_options_bl)
+        handler.requests[None] = request_bl
+        handler._is_error_msg(msg_daily_reached)
+        assert Event.RESPONSE == await request_bl.msg_queue.get()
+
+    async def test_star_stop(self, session_options_bl, request_bl):
+        """
+        Just open service and wait for RESPONSE
+        """
+        handler = HandlerRef(session_options_bl)
+        asyncio.create_task(handler.send_requests([request_bl]))
+        asyncio.create_task(request_bl.process())
+        await request_bl.process()
+
+        assert True

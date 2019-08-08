@@ -25,8 +25,11 @@ class Event:
     """
     contains Message and type
     """
+    PARTIAL_RESPONSE = 'PARTIAL_RESPONSE'
     RESPONSE = 'RESPONSE'
     OTHER = "other"
+    SESSION_STATUS = 'SESSION_STATUS'
+    SERVICE_STATUS = 'SERVICE_STATUS'
 
     def __iter__(self):
         """
@@ -153,7 +156,10 @@ class Message:
         self._name = name
         self._children = children or {}
         self._value = value
-        self._correlationIds = [correlationId, ]
+        self._correlation_ids = [correlationId, ]
+
+    def hasElement(self,name):
+        return name in self._children
 
     def correlationIds(self):
         """
@@ -162,7 +168,7 @@ class Message:
             ``allowMultipleCorrelatorsPerMsg`` is enabled and more than one
             active subscription would result in the same
         """
-        return self._correlationIds
+        return self._correlation_ids
 
     def asElement(self):
         """
@@ -205,7 +211,6 @@ class Element:
         """
         self.setValue(value, internals.ELEMENT_INDEX_END)
         """
-
 
     def getValue(self):
         """
@@ -276,10 +281,11 @@ class Session:
         """
         Start Bloomberg session in a separate thread
         """
-        self.events.put(Event(type_=Event.OTHER,
-                              msgs=[Message(value=0, name='SessionStarted'),
-                                    Message(value=0, name='ServiceOpened'),
-                                    ]
+        self.events.put(Event(type_=Event.SESSION_STATUS,
+                              msgs=[
+                                  Message(value=0, name='SessionStarted'),
+
+                                  ]
                               )
                         )
         thread = threading.Thread(target=self._async_start,
@@ -299,10 +305,10 @@ class Session:
         """
         before you can get Service you need to open it
         """
-        self.events.put(Event(type_=Event.OTHER,
-                              msgs=[Message(value=0, name='SessionStarted'),
-                                    Message(value=0, name='ServiceOpened'),
-                                    ]
+        self.events.put(Event(type_=Event.SERVICE_STATUS,
+                              msgs=[
+                                  Message(value=0, name='ServiceOpened'),
+                                  ]
                               )
                         )
         thread = threading.Thread(target=self._async_start,
@@ -336,6 +342,7 @@ class Name(str):
     """
     is same as str in blpapi there same optimization
     """
+
 
 # pylint: disable=too-few-public-methods
 class DataType:

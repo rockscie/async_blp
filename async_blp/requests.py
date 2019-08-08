@@ -77,14 +77,25 @@ class ReferenceDataRequest:
         self.fields = fields
         self.security_id_type = security_id_type
         self.overrides = overrides or {}
-        self.msg_queue = asyncio.Queue()
+
+        self._msg_queue = None
+
+    @property
+    def msg_queue(self):
+        """
+        we must create queue in correct loop
+        """
+
+        if self._msg_queue is None:
+            self._msg_queue = asyncio.Queue()
+        return self._msg_queue
 
     async def process(self) -> pd.DataFrame:
         dataframes = []
 
         while True:
             msg = await self.msg_queue.get()
-
+            print(msg)
             if msg == blpapi.Event.RESPONSE:
                 break
             try:
