@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Dict
 from typing import List
+from typing import Union
 
 from async_blp.abs_handler import AbsHandler
 
@@ -149,10 +150,36 @@ class Message:
 
 class Element:
 
-    def __init__(self, name, value, children: Dict[str, 'Element'] = None):
+    def __init__(self, name, value,
+                 children: Union[List['Element'], Dict[str, 'Element']] = None,
+                 ):
         self._name = name
         self._children = children or {}
         self._value = value
+
+    def _get_children_str(self):
+        if isinstance(self._children, list) and self._children:
+            return '\n\t'.join([str(child)
+                                for child in self._children])
+
+        if isinstance(self._children, dict) and self._children:
+            return '\n\t'.join([f'{name} = {child._get_children_str()}'
+                                for name, child in self._children.items()])
+
+        return f'\t{self._value}'
+
+    def __str__(self):
+        if not self._children:
+            return f'{self._name} = {self._value}'
+
+        if isinstance(self._children, list):
+            suffix = '[]'
+        else:
+            suffix = '{}'
+
+        return f'{self._name}{suffix} = {{\n {self._get_children_str()} \n  }}'
+
+    __repr__ = __str__
 
     def appendValue(self):
         pass
@@ -161,15 +188,22 @@ class Element:
         return self._value
 
     def elements(self):
-        return list(self._children.values())
+        if isinstance(self._children, dict):
+            return list(self._children.values())
+        return self._children
 
     def values(self):
         return self.elements()
 
     def datatype(self):
-        pass
+        # this is not in accordance with Bloomberg
+        if self.isArray():
+            return DataType.SEQUENCE
+        else:
+            return DataType.STRING
 
     def isArray(self):
+        # this is not in accordance with Bloomberg
         return bool(self._children)
 
     def getElementAsString(self, element_name):
@@ -179,7 +213,10 @@ class Element:
         return self._name
 
     def getElement(self, element_name):
-        return self._children[element_name]
+        if isinstance(self._children, dict):
+            return self._children[element_name]
+
+        raise RuntimeError
 
 
 class Name(str):
@@ -188,3 +225,4 @@ class Name(str):
 
 class DataType:
     SEQUENCE = 'sequence'
+    STRING = 'string'

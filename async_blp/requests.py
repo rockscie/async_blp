@@ -96,19 +96,21 @@ class ReferenceDataRequest:
 
     def _parse_security_data(self, security_data) -> pd.DataFrame:
         security_id = security_data.getElementAsString(SECURITY)
-        security_errors = security_data.getElement(SECURITY_ERROR)
-        field_errors = security_data.getElement(FIELD_EXCEPTIONS)
+        # security_errors = security_data.getElement(SECURITY_ERROR)
+        # field_errors = security_data.getElement(FIELD_EXCEPTIONS)
         # todo clean security id, save errors
 
-        data: blpapi.Element = security_data.getElement(FIELD_DATA)
-
-        field_data = list(data.elements())
+        field_data: blpapi.Element = security_data.getElement(FIELD_DATA)
 
         security_df = pd.DataFrame()
 
-        for field in field_data:
+        for field in field_data.elements():
             field_name, field_value = self._parse_field_data(field)
-            security_df.loc[security_id, field_name] = field_value
+
+            if field_name not in security_df and isinstance(field_value, list):
+                security_df[field_name] = pd.Series().astype(object)
+
+            security_df.at[security_id, field_name] = field_value
 
         return security_df
 
@@ -129,11 +131,10 @@ class ReferenceDataRequest:
 
         values = [
             {
-                str(e2.name()): e2.getValue()
-                for e2 in e1.elements()
+                str(e1.name()): e1.getValue()
+                for e1 in elem.values()
                 }
             for elem in field.elements()
-            for e1 in elem.values()
             ]
 
         if values and len(values[0]) == 1:
