@@ -3,6 +3,7 @@ File contains handler for ReferenceDataRequest
 """
 
 import asyncio
+import uuid
 from typing import Dict
 from typing import List
 
@@ -10,8 +11,10 @@ from async_blp.abs_handler import AbsHandler
 from async_blp.requests import ReferenceDataRequest
 
 try:
+    # pylint: disable=ungrouped-imports
     import blpapi
 except ImportError:
+    # pylint: disable=ungrouped-imports
     from async_blp import env_test as blpapi
 
 
@@ -20,72 +23,76 @@ class HandlerRef(AbsHandler):
     Handler gets response events from Bloomberg from other thread, then
     asynchronously processes it. Each handler opens its own session
     """
-    service_name = "//blp/refdata"
-    request_name = "ReferenceDataRequest"
 
-    def __init__(self, start_session=True):
+    def __init__(self,
+                 session_options: blpapi.SessionOptions):
         """
         It is important to start session with startAsync before doing anything
         else
         """
         super().__init__()
-
-        self.requests: Dict[str, ReferenceDataRequest] = {}
+        self.requests: Dict[blpapi.CorrelationId, ReferenceDataRequest] = {}
         self.connection = asyncio.Event()
+        self.services: Dict[str, asyncio.Event()] = {}
         self.loop = asyncio.get_running_loop()
-        self.complete_event: asyncio.Event = asyncio.Event()
-        self.queue = asyncio.Queue()
-
-        session_options = blpapi.SessionOptions()
-        session_options.setServerHost("localhost")
-        session_options.setServerPort(8194)
-
         self.session = blpapi.Session(options=session_options,
                                       eventHandler=self)
-        if start_session:
-            self.session.startAsync()
 
-    def send_requests(self, requests: List[ReferenceDataRequest]):
+        self.session.startAsync()
+
+    async def send_requests(self, requests: List[ReferenceDataRequest]):
         """
         save and prepare requests
+         Wait until session is started and service is opened,
+                   then send requests
         """
-        self.requests['id'] = requests
-
-    async def _send_requests(self):
-        """
-        Wait until session is started and service is opened, then send requests
-        """
+        for request in requests:
+            id_ = blpapi.CorrelationId(uuid.uuid4())
+            self.requests[id_] = request
         await self.connection.wait()
-        service = self.session.getService(self.service_name)
-
-        for request in self.requests.values():
+        for id_, request in self.requests.items():
+            service = await self._get_service(request.service_name)
             blp_request = request.create(service)
-            self.session.sendRequest(blp_request)
+            self.session.sendRequest(blp_request, correlationId=id_)
 
-        self.complete_event.clear()
+    async def _get_service(self, name: str):
+        """
+        try open service if needed and close other if needed
+        connection already must be opened
+        """
+        if name not in self.services:
+            self.session.openServiceAsync(name)
+            self.services[name] = asyncio.Event()
+        await self.services[name].wait()
+        service = self.session.getService(name)
+        return service
 
     def __call__(self, event: blpapi.Event, session: blpapi.Session):
         """
         Process response event from Bloomberg
         """
-        print('got type ', event.eventType())
+        type_ = event.eventType()
         for msg in event:
-
+            correlation_ids = [cor_id for cor_id in msg.correlationIds()]
             if msg.asElement().name() == 'SessionStarted':
-                session.openServiceAsync(self.service_name)
-
-            if msg.asElement().name() == 'ServiceOpened':
+                # you need wait this event before open session
                 self.loop.call_soon_threadsafe(lambda event_: event_.set(),
                                                self.connection)
 
-            if event.eventType() == blpapi.Event.RESPONSE:
-                corr_id = '1'
-                request = self.requests[corr_id]
+            if msg.asElement().name() == 'ServiceOpened':
+                # you need wait this event before SEND request
+                for opne_event in self.services.values():
+                    self.loop.call_soon_threadsafe(lambda event_: event_.set(),
+                                                   opne_event)
 
-                self.loop.call_soon_threadsafe(
-                    lambda msg: request.msg_queue.put(msg),
-                    msg)
+            if type_ == blpapi.Event.RESPONSE:
+                # last event
+                for corr_id in correlation_ids:
+                    request = self.requests[corr_id]
+                    self.loop.call_soon_threadsafe(
+                        request.msg_queue.put_nowait,
+                        msg)
 
-                self.loop.call_soon_threadsafe(
-                    lambda msg: request.msg_queue.put('END'),
-                    msg)
+                    self.loop.call_soon_threadsafe(
+                        request.msg_queue.put_nowait,
+                        blpapi.Event.RESPONSE)

@@ -80,18 +80,25 @@ class ReferenceDataRequest:
         self.msg_queue = asyncio.Queue()
 
     async def process(self) -> pd.DataFrame:
-        msg = ''
         dataframes = []
 
-        while msg != 'END':
+        while True:
             msg = await self.msg_queue.get()
-            msg_data = list(msg.getElement(SECURITY_DATA).values())
 
-            msg_frames = [self._parse_security_data(security_data)
-                          for security_data in msg_data]
+            if msg == blpapi.Event.RESPONSE:
+                break
+            try:
+                msg_data = list(msg.getElement(SECURITY_DATA).values())
 
-            dataframes.extend(msg_frames)
+                msg_frames = [self._parse_security_data(security_data)
+                              for security_data in msg_data]
 
+                dataframes.extend(msg_frames)
+            except KeyError:
+                print("we can't parse it")
+
+        if not dataframes:
+            return pd.DataFrame()
         return pd.concat(dataframes, axis=0)
 
     def _parse_security_data(self, security_data) -> pd.DataFrame:
