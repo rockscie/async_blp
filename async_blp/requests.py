@@ -187,9 +187,9 @@ class ReferenceDataRequest:
         values = [
             {
                 str(e1.name()): e1.getValue()
-                for e1 in elem.values()
+                for e1 in elem.elements()
                 }
-            for elem in field.elements()
+            for elem in field.values()
             ]
 
         if values and len(values[0]) == 1:
