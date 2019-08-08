@@ -1,3 +1,6 @@
+"""
+Thus module contains wrappers for different types of Bloomberg requests
+"""
 import asyncio
 import datetime as dt
 import enum
@@ -71,7 +74,8 @@ class ReferenceDataRequest:
                  securities: List[str],
                  fields: List[str],
                  security_id_type: Optional[SecurityIdType] = None,
-                 overrides: Optional[Dict] = None):
+                 overrides: Optional[Dict] = None,
+                 ):
 
         self.securities = securities
         self.fields = fields
@@ -79,12 +83,39 @@ class ReferenceDataRequest:
         self.overrides = overrides or {}
         self.msg_queue = asyncio.Queue()
 
+        try:
+            self.loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self.loop = None
+
+    def queue_message(self, msg):
+        """
+        Put message to this request's async queue
+        """
+        if self.loop is None:
+            raise RuntimeError('Please create request inside async loop if you '
+                               'want to use async')
+
+        self.loop.call_soon_threadsafe(self.msg_queue.put_nowait, msg)
+
     async def process(self) -> pd.DataFrame:
-        msg = ''
+        """
+        Asynchronously process events from `msg_queue` until the event with
+        event type RESPONSE is received. This method doesn't check if received
+        events belongs to this request and will return everything that
+        can be parsed.
+
+        Return format is pd.DataFrame with columns as fields and indexes
+        as security_ids.
+        """
         dataframes = []
 
-        while msg != 'END':
+        while True:
             msg = await self.msg_queue.get()
+
+            if msg is None:
+                break
+
             msg_data = list(msg.getElement(SECURITY_DATA).values())
 
             msg_frames = [self._parse_security_data(security_data)
@@ -92,9 +123,18 @@ class ReferenceDataRequest:
 
             dataframes.extend(msg_frames)
 
-        return pd.concat(dataframes, axis=0)
+        if dataframes:
+            return pd.concat(dataframes, axis=0)
+
+        return pd.DataFrame()
 
     def _parse_security_data(self, security_data) -> pd.DataFrame:
+        """
+        Parse single security data element.
+
+        Return pd.DataFrame with one row and multiple columns corresponding
+        to the received fields.
+        """
         security_id = security_data.getElementAsString(SECURITY)
         # security_errors = security_data.getElement(SECURITY_ERROR)
         # field_errors = security_data.getElement(FIELD_EXCEPTIONS)
@@ -116,17 +156,32 @@ class ReferenceDataRequest:
 
     def _parse_field_data(self,
                           field: blpapi.Element,
-                          ) -> Tuple[str, List[BloombergValue]]:  # fix typing
+                          ) -> Tuple[str,
+                                     Union[BloombergValue,
+                                           List[BloombergValue],
+                                           List[Dict[str, BloombergValue]]]]:
+        """
+        Parse single field data element.
+
+        If field data contains bulk data, return list of dicts or list of
+        values. Otherwise, return single value
+        """
 
         if field.isArray():
             return self._parse_array_field(field)
 
-        else:
-            field_name = str(field.name())
-            field_value = field.getValue()
-            return field_name, field_value
+        field_name = str(field.name())
+        field_value = field.getValue()
+        return field_name, field_value
 
-    def _parse_array_field(self, field: blpapi.Element):
+    @staticmethod
+    def _parse_array_field(field: blpapi.Element):
+        """
+        Parse single field that contains bulk data.
+
+        Return field name and field values, either as list of dicts or
+        list of values.
+        """
         field_name = str(field.name())
 
         values = [
@@ -144,6 +199,9 @@ class ReferenceDataRequest:
         return field_name, values
 
     def create(self, service: blpapi.Service) -> blpapi.Request:
+        """
+        Create Bloomberg request. Given `service` must be opened beforehand.
+        """
         request = service.createRequest(self.request_name)
 
         if self.security_id_type is None:
