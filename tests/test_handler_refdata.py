@@ -12,6 +12,7 @@ from async_blp.env_test import SessionOptions
 from async_blp.handler_refdata import HandlerRef
 from async_blp.requests import ReferenceDataRequest
 
+
 # pylint is not like pytest.fixture but we do
 # pylint: disable=redefined-outer-name
 # it's test we need protected-access
@@ -99,7 +100,7 @@ class TestHandlerAsync:
         """
         only handler knows when we can open Service
         """
-        request_bl.loop = asyncio.get_running_loop()
+        request_bl._loop = asyncio.get_running_loop()
         handler = HandlerRef(session_options_bl)
         await handler.send_requests([request_bl])
         await handler.send_requests([request_bl])
@@ -121,10 +122,10 @@ class TestHandlerAsync:
         only handler knows when we can open Service
         """
         handler = HandlerRef(session_options_bl)
-        request_bl.loop = asyncio.get_running_loop()
+        request_bl._loop = asyncio.get_running_loop()
         handler.requests[None] = request_bl
         handler._is_error_msg(msg_daily_reached)
-        assert await request_bl.msg_queue.get() is None
+        assert await request_bl._msg_queue.get() is None
 
     @pytest.mark.skip()
     async def test_star_stop(self, session_options_bl, request_bl):
@@ -132,7 +133,7 @@ class TestHandlerAsync:
         Just open service and wait for RESPONSE
         """
 
-        request_bl.loop = asyncio.get_running_loop()
+        request_bl._loop = asyncio.get_running_loop()
         handler = HandlerRef(session_options_bl)
         asyncio.create_task(handler.send_requests([request_bl]))
         asyncio.create_task(request_bl.process())
