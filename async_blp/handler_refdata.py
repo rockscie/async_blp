@@ -67,9 +67,10 @@ class HandlerRef(AbsHandler):
         try open service if needed and close other if needed
         connection already must be opened
         """
+        print('_get_service')
         if name not in self.services:
-            self.session.openServiceAsync(name)
             self.services[name] = asyncio.Event()
+            self.session.openServiceAsync(name)
         await self.services[name].wait()
         service = self.session.getService(name)
         return service
