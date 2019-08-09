@@ -106,9 +106,7 @@ class ReferenceDataRequest:
 
     def send_queue_message(self, msg):
         """
-        Thread-safe method that put the msg
-        Put message to this request's async queue using given loop or
-        default loop
+        Thread-safe method that put the given msg into async queue
         """
         if self._loop is None or self._msg_queue is None:
             raise RuntimeError('Please create request inside async loop or set '
