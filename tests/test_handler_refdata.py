@@ -115,28 +115,17 @@ class TestHandlerAsync:
         assert await handler._get_service('test')
         assert handler.services['test'].is_set()
 
-    async def test_call_limit(self, session_options_bl,
+    async def test_call_limit(self,
+                              session_options_bl,
                               request_bl,
                               msg_daily_reached, ):
         """
         only handler knows when we can open Service
         """
+        request_bl.set_running_loop_as_default()
         handler = HandlerRef(session_options_bl)
-        request_bl._loop = asyncio.get_running_loop()
         handler.requests[None] = request_bl
-        handler._is_error_msg(msg_daily_reached)
+
+        assert handler._is_error_msg(msg_daily_reached)
+
         assert await request_bl._msg_queue.get() is None
-
-    @pytest.mark.skip()
-    async def test_star_stop(self, session_options_bl, request_bl):
-        """
-        Just open service and wait for RESPONSE
-        """
-
-        request_bl._loop = asyncio.get_running_loop()
-        handler = HandlerRef(session_options_bl)
-        asyncio.create_task(handler.send_requests([request_bl]))
-        asyncio.create_task(request_bl.process())
-        await request_bl.process()
-
-        assert True

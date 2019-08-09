@@ -110,7 +110,7 @@ class ReferenceDataRequest:
         Put message to this request's async queue using given loop or
         default loop
         """
-        if self._loop is None:
+        if self._loop is None or self._msg_queue is None:
             raise RuntimeError('Please create request inside async loop or set '
                                'loop explicitly if you want to use async')
 
