@@ -1,5 +1,5 @@
 """
-For test Handler we must use env_test for emulate Bloomberg
+For test Handler we must use env_test to emulate Bloomberg
 """
 import asyncio
 
@@ -8,9 +8,10 @@ import pytest
 from async_blp.handler_refdata import HandlerRef
 
 
-# pylint is not like pytest.fixture but we do
+# pylint does not like pytest.fixture but we do
 # pylint: disable=redefined-outer-name
-# it's test we need protected-access
+
+# it's test we need protected access
 # pylint: disable=protected-access
 
 
@@ -71,7 +72,7 @@ class TestHandleRef:
         task1 = asyncio.create_task(handler.send_requests([data_request]))
         data_request.loop = asyncio.get_running_loop()
         await asyncio.sleep(0.00001)
-        assert len(handler.requests) > 1, "all requests must have own id"
+        assert len(handler.requests) > 1, "all requests must have their own id"
         task.cancel()
         task1.cancel()
 
@@ -90,16 +91,4 @@ class TestHandleRef:
         handler._is_error_msg(msg_daily_reached)
         assert await data_request.msg_queue.get() is None
 
-    async def test_star_stop(self,
-                             session_options,
-                             data_request):
-        """
-        Just open service and wait for RESPONSE
-        """
 
-        data_request.loop = asyncio.get_running_loop()
-        handler = HandlerRef(session_options)
-        asyncio.create_task(handler.send_requests([data_request]))
-        asyncio.create_task(data_request.process())
-        await data_request.process()
-        assert True

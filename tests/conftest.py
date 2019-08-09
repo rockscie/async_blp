@@ -14,13 +14,13 @@ from async_blp.env_test import SessionOptions
 from async_blp.requests import ReferenceDataRequest
 
 
-# pylint is not like pytest.fixture but we do
+# pylint does not like pytest.fixture but we do
 # pylint: disable=redefined-outer-name
 
 @pytest.fixture()
 def session_options() -> SessionOptions():
     """
-    for test not important
+    for tests it's not important
     """
     session_options_ = SessionOptions()
     session_options_.setServerHost("localhost")
@@ -41,7 +41,8 @@ def data_request():
 @pytest.fixture()
 def open_session_event():
     """
-    first event
+    SessionStarted event that is the first event that Bloomberg sends,
+    indicates that session was successfully opened
     """
     event_ = Event(type_=Event.SESSION_STATUS,
                    msgs=[Message(value=0, name='SessionStarted'), ]
@@ -52,7 +53,7 @@ def open_session_event():
 @pytest.fixture()
 def open_service_event():
     """
-    first event
+    ServiceOpened event, indicates that service was successfully opened
     """
     event_ = Event(type_=Event.SERVICE_STATUS,
                    msgs=[Message(value=0, name='ServiceOpened'), ]
@@ -63,7 +64,7 @@ def open_service_event():
 @pytest.fixture()
 def element_daily_reached():
     """
-    error when you load to many
+    Error indicating that too many requests were made
     """
     return Element(name='subcategory', value='DAILY_LIMIT_REACHED')
 
@@ -71,7 +72,7 @@ def element_daily_reached():
 @pytest.fixture()
 def msg_daily_reached(element_daily_reached):
     """
-    error when you load to many
+    Error indicating that too many requests were made
     """
     return Message(name="responseError",
                    value='',
@@ -84,7 +85,7 @@ def msg_daily_reached(element_daily_reached):
 @pytest.fixture()
 def element_monthly_reached():
     """
-    error when you load to many
+    Error indicating that too many requests were made
     """
     return Element(name='subcategory', value='MONTHLY_LIMIT_REACHED')
 
@@ -92,7 +93,7 @@ def element_monthly_reached():
 @pytest.fixture()
 def error_event(msg_daily_reached):
     """
-    error when you load to many
+    Error indicating that too many requests were made
     """
     return Event(type_=Event.RESPONSE,
                  msgs=[
