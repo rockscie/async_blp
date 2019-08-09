@@ -323,16 +323,6 @@ class Session:
         """
         Start Bloomberg session in a separate thread
         """
-        self.events.put(Event(type_=Event.SESSION_STATUS,
-                              msgs=[
-                                  Message(value=0, name='SessionStarted'),
-
-                                  ]
-                              )
-                        )
-        thread = threading.Thread(target=self._async_start,
-                                  args=(self.handler,))
-        thread.start()
 
     def _async_start(self, handler: AbsHandler):
         """
@@ -347,30 +337,28 @@ class Session:
         """
         before you can get Service you need to open it
         """
-        self.events.put(Event(type_=Event.SERVICE_STATUS,
-                              msgs=[
-                                  Message(value=0, name='ServiceOpened'),
-                                  ]
-                              )
-                        )
+
+    def send_event(self, event_: Event):
+        """
+        for testing you must create correct events amd sent it by properly time
+        """
+        self.events.put(event_)
         thread = threading.Thread(target=self._async_start,
                                   args=(self.handler,))
         thread.start()
 
-    def sendRequest(self, request, correlationId):
+    def sendRequest(self, request, correlationId: CorrelationId):
         """
         all request immediately put close messages
         """
-        self.events.put(Event(
+        e = Event(
             type_=Event.RESPONSE,
             msgs=[
                 Message(value=0, name='test', correlationId=correlationId),
                 Message(value=0, name='test', correlationId=correlationId),
-                ]
-            ))
-        thread = threading.Thread(target=self._async_start,
-                                  args=(self.handler,))
-        thread.start()
+                ])
+
+        self.send_event(e)
 
     @staticmethod
     def getService(*args, **kwargs):
