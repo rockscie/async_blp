@@ -1,3 +1,5 @@
+import asyncio
+
 import pandas as pd
 import pytest
 
@@ -166,3 +168,65 @@ class TestReferenceDataRequest:
         actual_df = request._parse_security_data(security_data)
 
         pd.testing.assert_frame_equal(actual_df, required_df)
+
+    def test__init__not_inside_loop(self,
+                                    simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+
+        assert request._loop is None
+        assert request._msg_queue is None
+
+    @pytest.mark.asyncio
+    async def test__set_running_loop_as_default__queue_is_empty(
+            self,
+            simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+
+        request.set_running_loop_as_default()
+
+        assert request._loop == asyncio.get_running_loop()
+
+    @pytest.mark.asyncio
+    async def test__set_running_loop_as_default__queue_is_not_empty(
+            self,
+            simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+        request._msg_queue.put_nowait(1)
+
+        with pytest.raises(RuntimeError):
+            request.set_running_loop_as_default()
+
+    def test__set_running_loop_as_default__not_inside_loop(
+            self,
+            simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+
+        with pytest.raises(RuntimeError):
+            request.set_running_loop_as_default()
+
+    @pytest.mark.asyncio
+    async def test__send_queue_message__inside_loop(self, simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+
+        request.send_queue_message(1)
+        await asyncio.sleep(0.001)
+
+        assert request._msg_queue.get_nowait() == 1
+
+    def test__send_queue_message__not_inside_loop(self, simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+
+        with pytest.raises(RuntimeError):
+            request.send_queue_message(1)

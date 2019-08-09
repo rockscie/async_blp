@@ -12,6 +12,8 @@ from typing import Union
 
 import pandas as pd
 
+from async_blp.log import LOGGER
+
 try:
     import blpapi
 except ImportError:
@@ -82,32 +84,36 @@ class ReferenceDataRequest:
         self.security_id_type = security_id_type
         self.overrides = overrides or {}
 
-        self._msg_queue = None
-
         try:
-            self.loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self.loop = None
-
-    @property
-    def msg_queue(self):
-        """
-        we must create queue in correct loop
-        """
-
-        if self._msg_queue is None:
+            self._loop = asyncio.get_running_loop()
             self._msg_queue = asyncio.Queue()
-        return self._msg_queue
+        except RuntimeError:
+            self._loop = None
+            self._msg_queue = None
+
+    def set_running_loop_as_default(self):
+        """
+        Set currently active loop as default for this request and create
+        new message queue
+        """
+        self._loop = asyncio.get_running_loop()
+
+        if self._msg_queue is not None and not self._msg_queue.empty():
+            raise RuntimeError('Current message queue is not empty')
+
+        self._msg_queue = asyncio.Queue()
+        LOGGER.debug('%s: loop has been changed', self.__class__.__name__)
 
     def send_queue_message(self, msg):
         """
-        Put message to this request's async queue
+        Thread-safe method that put the given msg into async queue
         """
-        if self.loop is None:
-            raise RuntimeError('Please create request inside async loop if you '
-                               'want to use async')
+        if self._loop is None or self._msg_queue is None:
+            raise RuntimeError('Please create request inside async loop or set '
+                               'loop explicitly if you want to use async')
 
-        self.loop.call_soon_threadsafe(self.msg_queue.put_nowait, msg)
+        self._loop.call_soon_threadsafe(self._msg_queue.put_nowait, msg)
+        LOGGER.debug('%s: message sent', self.__class__.__name__)
 
     async def process(self) -> pd.DataFrame:
         """
@@ -122,10 +128,16 @@ class ReferenceDataRequest:
         dataframes = []
 
         while True:
-            msg = await self.msg_queue.get()
+            LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
+            msg = await self._msg_queue.get()
 
             if msg is None:
+                LOGGER.debug('%s: last message received, processing is '
+                             'finished',
+                             self.__class__.__name__)
                 break
+
+            LOGGER.debug('%s: message received', self.__class__.__name__)
 
             msg_data = list(msg.getElement(SECURITY_DATA).values())
 
