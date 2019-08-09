@@ -12,6 +12,11 @@ from async_blp.env_test import SessionOptions
 from async_blp.handler_refdata import HandlerRef
 from async_blp.requests import ReferenceDataRequest
 
+# pylint is not like pytest.fixture but we do
+# pylint: disable=redefined-outer-name
+# it's test we need protected-access
+# pylint: disable=protected-access
+
 
 @pytest.fixture()
 def session_options_bl() -> SessionOptions():
@@ -26,6 +31,9 @@ def session_options_bl() -> SessionOptions():
 
 @pytest.fixture()
 def request_bl():
+    """
+    Simple request
+    """
     field_name = 'PX_LAST'
     security_id = 'F Equity'
     return ReferenceDataRequest([security_id], [field_name])
@@ -33,16 +41,25 @@ def request_bl():
 
 @pytest.fixture()
 def element_daily_reached():
+    """
+    error when you load to many
+    """
     return Element(name='subcategory', value='DAILY_LIMIT_REACHED')
 
 
 @pytest.fixture()
 def element_monthly_reached():
+    """
+    error when you load to many
+    """
     return Element(name='subcategory', value='MONTHLY_LIMIT_REACHED')
 
 
 @pytest.fixture()
 def msg_daily_reached():
+    """
+    error when you load to many
+    """
     return Message(name="responseError",
                    value='',
                    children={
@@ -53,6 +70,9 @@ def msg_daily_reached():
 
 @pytest.fixture()
 def error_event(msg_daily_reached):
+    """
+    error when you load to many
+    """
     return Event(type_=Event.RESPONSE,
                  msgs=[
                      msg_daily_reached,
@@ -61,7 +81,7 @@ def error_event(msg_daily_reached):
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(1)
+@pytest.mark.timeout(5)
 class TestHandlerAsync:
     """
     test all async methods
@@ -79,6 +99,7 @@ class TestHandlerAsync:
         """
         only handler knows when we can open Service
         """
+        request_bl.loop = asyncio.get_running_loop()
         handler = HandlerRef(session_options_bl)
         await handler.send_requests([request_bl])
         await handler.send_requests([request_bl])
@@ -95,19 +116,23 @@ class TestHandlerAsync:
 
     async def test_call_limit(self, session_options_bl,
                               request_bl,
-                              msg_daily_reached,):
+                              msg_daily_reached, ):
         """
         only handler knows when we can open Service
         """
         handler = HandlerRef(session_options_bl)
+        request_bl.loop = asyncio.get_running_loop()
         handler.requests[None] = request_bl
         handler._is_error_msg(msg_daily_reached)
-        assert Event.RESPONSE == await request_bl.msg_queue.get()
+        assert await request_bl.msg_queue.get() is None
 
+    @pytest.mark.skip()
     async def test_star_stop(self, session_options_bl, request_bl):
         """
         Just open service and wait for RESPONSE
         """
+
+        request_bl.loop = asyncio.get_running_loop()
         handler = HandlerRef(session_options_bl)
         asyncio.create_task(handler.send_requests([request_bl]))
         asyncio.create_task(request_bl.process())

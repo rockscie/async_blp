@@ -99,9 +99,7 @@ class ReferenceDataRequest:
             self._msg_queue = asyncio.Queue()
         return self._msg_queue
 
-
-
-    def queue_message(self, msg):
+    def send_queue_message(self, msg):
         """
         Put message to this request's async queue
         """

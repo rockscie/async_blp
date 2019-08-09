@@ -160,6 +160,9 @@ class Message:
         self._correlation_ids = [correlationId, ]
 
     def hasElement(self, name):
+        """
+        blpiapi interface
+        """
         return name in self._children
 
     def correlationIds(self):
@@ -213,13 +216,17 @@ class Element:
         """
         self.setValue(value, internals.ELEMENT_INDEX_END)
         """
-    def _get_children_str(self):
+
+    def get_children_str(self):
+        """
+        for print
+        """
         if isinstance(self._children, list) and self._children:
             return '\n\t'.join([str(child)
                                 for child in self._children])
 
         if isinstance(self._children, dict) and self._children:
-            return '\n\t'.join([f'{name} = {child._get_children_str()}'
+            return '\n\t'.join([f'{name} = {child.get_children_str()}'
                                 for name, child in self._children.items()])
 
         return f'\t{self._value}'
@@ -233,7 +240,7 @@ class Element:
         else:
             suffix = '{}'
 
-        return f'{self._name}{suffix} = {{\n {self._get_children_str()} \n  }}'
+        return f'{self._name}{suffix} = {{\n {self.get_children_str()} \n  }}'
 
     __repr__ = __str__
 
@@ -264,8 +271,8 @@ class Element:
         # this is not in accordance with Bloomberg
         if self.isArray():
             return DataType.SEQUENCE
-        else:
-            return DataType.STRING
+
+        return DataType.STRING
 
     def isArray(self):
         """

@@ -70,21 +70,17 @@ class HandlerRef(AbsHandler):
         if name not in self.services:
             self.session.openServiceAsync(name)
             self.services[name] = asyncio.Event()
-        print('start', self.services[name])
         await self.services[name].wait()
         service = self.session.getService(name)
-        print(service)
         return service
 
-    def _close_requests(self, requests: List[ReferenceDataRequest]):
+    @staticmethod
+    def _close_requests(requests: List[ReferenceDataRequest]):
         """
         send specific msg in all queues to close it
         """
-        print('_close_requests')
         for request in requests:
-            self.loop.call_soon_threadsafe(
-                request.msg_queue.put_nowait,
-                blpapi.Event.RESPONSE)
+            request.send_queue_message(None)
 
     def _is_error_msg(self, msg: blpapi.Event) -> bool:
         """
@@ -95,6 +91,7 @@ class HandlerRef(AbsHandler):
                         for cor_id in msg.correlationIds()]
             self._close_requests(requests)
             return True
+        return False
 
     def _session_handler(self, event_: blpapi.Event):
         """
@@ -111,11 +108,8 @@ class HandlerRef(AbsHandler):
         you need wait this event before SEND request
         """
         msg = list(event_)[0]
-        print("try", msg.asElement().name())
         if msg.asElement().name() == 'ServiceOpened':
-            print("try", msg.asElement().name())
             for open_event in self.services.values():
-                print("try", open_event)
                 self.loop.call_soon_threadsafe(lambda event_async:
                                                event_async.set(),
                                                open_event)
@@ -131,9 +125,7 @@ class HandlerRef(AbsHandler):
 
             for request in [self.requests[cor_id]
                             for cor_id in msg.correlationIds()]:
-                self.loop.call_soon_threadsafe(
-                    request.msg_queue.put_nowait,
-                    msg)
+                request.send_queue_message(msg)
 
     def _response_handler(self, event_: blpapi.Event):
         """
@@ -149,4 +141,6 @@ class HandlerRef(AbsHandler):
         """
         Process response event from Bloomberg
         """
+        print(event.eventType())
+        print(self.method_map[event.eventType()])
         self.method_map[event.eventType()](event)
