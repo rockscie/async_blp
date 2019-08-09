@@ -14,6 +14,7 @@ import threading
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Union
 
 from async_blp.abs_handler import AbsHandler
 
@@ -158,7 +159,7 @@ class Message:
         self._value = value
         self._correlation_ids = [correlationId, ]
 
-    def hasElement(self,name):
+    def hasElement(self, name):
         return name in self._children
 
     def correlationIds(self):
@@ -199,7 +200,8 @@ class Element:
     def __init__(self,
                  name=None,
                  value=None,
-                 children: Dict[str, 'Element'] = None):
+                 children: Union[List['Element'], Dict[str, 'Element']] = None,
+                 ):
         """
         Crating only in test real blp give you element from request or msg
         """
@@ -211,6 +213,29 @@ class Element:
         """
         self.setValue(value, internals.ELEMENT_INDEX_END)
         """
+    def _get_children_str(self):
+        if isinstance(self._children, list) and self._children:
+            return '\n\t'.join([str(child)
+                                for child in self._children])
+
+        if isinstance(self._children, dict) and self._children:
+            return '\n\t'.join([f'{name} = {child._get_children_str()}'
+                                for name, child in self._children.items()])
+
+        return f'\t{self._value}'
+
+    def __str__(self):
+        if not self._children:
+            return f'{self._name} = {self._value}'
+
+        if isinstance(self._children, list):
+            suffix = '[]'
+        else:
+            suffix = '{}'
+
+        return f'{self._name}{suffix} = {{\n {self._get_children_str()} \n  }}'
+
+    __repr__ = __str__
 
     def getValue(self):
         """
@@ -222,7 +247,9 @@ class Element:
         """
         Iterator over elements contained
         """
-        return list(self._children.values())
+        if isinstance(self._children, dict):
+            return list(self._children.values())
+        return self._children
 
     def values(self):
         """
@@ -234,11 +261,17 @@ class Element:
         """
         The possible types are enumerated in :class:`DataType`.
         """
+        # this is not in accordance with Bloomberg
+        if self.isArray():
+            return DataType.SEQUENCE
+        else:
+            return DataType.STRING
 
     def isArray(self):
         """
         This element is an array if ``elementDefinition().maxValues()>1``
         """
+        # this is not in accordance with Bloomberg
         return bool(self._children)
 
     def getElementAsString(self, element_name):
@@ -255,9 +288,11 @@ class Element:
 
     def getElement(self, element_name):
         """
-        be careful there no testing
-        """
-        return self._children[element_name]
+                be careful there no testing
+                """
+        if isinstance(self._children, dict):
+            return self._children[element_name]
+        raise RuntimeError
 
 
 class Session:
@@ -351,3 +386,4 @@ class DataType:
     :class:`Element
     """
     SEQUENCE = 'sequence'
+    STRING = 'string'
