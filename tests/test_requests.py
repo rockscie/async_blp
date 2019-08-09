@@ -190,13 +190,24 @@ class TestReferenceDataRequest:
 
         assert request._loop == asyncio.get_running_loop()
 
-    def test__set_running_loop_as_default__queue_is_not_empty(
+    @pytest.mark.asyncio
+    async def test__set_running_loop_as_default__queue_is_not_empty(
             self,
             simple_field_data):
         field_name, _, security_id = simple_field_data
 
         request = ReferenceDataRequest([security_id], [field_name])
         request._msg_queue.put_nowait(1)
+
+        with pytest.raises(RuntimeError):
+            request.set_running_loop_as_default()
+
+    def test__set_running_loop_as_default__not_inside_loop(
+            self,
+            simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
 
         with pytest.raises(RuntimeError):
             request.set_running_loop_as_default()
