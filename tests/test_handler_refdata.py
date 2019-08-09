@@ -27,7 +27,7 @@ class TestHandleRef:
                                     open_session_event,
                                     ):
         """
-        we try connect in init
+        we try to connect in init
         """
         handler = HandlerRef(session_options)
         assert not handler.connection.is_set()
@@ -76,19 +76,22 @@ class TestHandleRef:
         task.cancel()
         task1.cancel()
 
-    async def test_call_limit(self, session_options,
+    async def test_call_limit(self,
+                              session_options,
                               data_request,
-                              msg_daily_reached, ):
+                              msg_daily_reached,
+                              ):
         """
-        only handler knows when we can open Service
+        @georgy please clarify what it does
         """
+
         handler = HandlerRef(session_options)
-        data_request.loop = asyncio.get_running_loop()
+        data_request.set_running_loop_as_default()
         handler._close_requests([data_request])
-        assert await data_request.msg_queue.get() is None
+        assert await data_request._msg_queue.get() is None
 
         handler.requests[None] = data_request
         handler._is_error_msg(msg_daily_reached)
-        assert await data_request.msg_queue.get() is None
+        assert await data_request._msg_queue.get() is None
 
 
