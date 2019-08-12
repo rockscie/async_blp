@@ -209,8 +209,10 @@ class ReferenceDataRequest:
 
         if security_data.hasElement(FIELD_EXCEPTIONS):
             field_exceptions = security_data.getElement(FIELD_EXCEPTIONS)
-            security_errors[security_id] = self._parse_field_exceptions(
-                field_exceptions)
+            field_errors = self._parse_field_exceptions(field_exceptions)
+
+            if field_errors:
+                security_errors[security_id] = field_errors
 
         if self._error_behaviour == ErrorBehaviour.RAISE and security_errors:
             raise BloombergException(security_errors)
