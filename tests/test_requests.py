@@ -4,10 +4,17 @@ import pandas as pd
 import pytest
 
 from async_blp.env_test import Element
-from async_blp.requests import FIELD_DATA
+from async_blp.requests import ErrorBehaviour
 from async_blp.requests import ReferenceDataRequest
-from async_blp.requests import SECURITY
-from async_blp.requests import SECURITY_DATA
+from async_blp.utils.blp_name import ERROR_INFO
+from async_blp.utils.blp_name import FIELD_DATA
+from async_blp.utils.blp_name import FIELD_EXCEPTIONS
+from async_blp.utils.blp_name import FIELD_ID
+from async_blp.utils.blp_name import MESSAGE
+from async_blp.utils.blp_name import SECURITY
+from async_blp.utils.blp_name import SECURITY_DATA
+from async_blp.utils.blp_name import SECURITY_ERROR
+from async_blp.utils.exc import BloombergException
 
 
 @pytest.fixture()
@@ -101,6 +108,55 @@ def security_data(one_value_array_field,
     return security_data
 
 
+@pytest.fixture()
+def field_exceptions(simple_field_data):
+    field_name, _, _ = simple_field_data
+
+    field_id = Element(FIELD_ID, field_name)
+    message = Element(MESSAGE, 'Invalid field')
+    error_info = Element(ERROR_INFO, None, {MESSAGE: message})
+
+    field_exception = Element(FIELD_EXCEPTIONS, None,
+                              {
+                                  FIELD_ID:   field_id,
+                                  ERROR_INFO: error_info,
+                                  })
+
+    field_exceptions = Element(FIELD_EXCEPTIONS, None, [field_exception])
+    return field_exceptions
+
+
+@pytest.fixture()
+def security_data_with_field_exception(simple_field_data, field_exceptions):
+    field_name, _, security_id = simple_field_data
+
+    security = Element(SECURITY, security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:         security,
+                                FIELD_EXCEPTIONS: field_exceptions,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def security_data_with_security_error(simple_field_data):
+    field_name, _, security_id = simple_field_data
+
+    security = Element(SECURITY, security_id)
+    security_error = Element(SECURITY_ERROR, 'Invalid security')
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:       security,
+                                SECURITY_ERROR: security_error,
+                                })
+
+    return security_data
+
+
 class TestReferenceDataRequest:
 
     def test___parse_field_data__simple_field(self,
@@ -165,7 +221,7 @@ class TestReferenceDataRequest:
                                    columns=[field_name],
                                    )
 
-        actual_df = request._parse_security_data(security_data)
+        actual_df, _ = request._parse_security_data(security_data)
 
         pd.testing.assert_frame_equal(actual_df, required_df)
 
@@ -230,3 +286,71 @@ class TestReferenceDataRequest:
 
         with pytest.raises(RuntimeError):
             request.send_queue_message(1)
+
+    def test___parse_field_exceptions(self,
+                                      field_exceptions,
+                                      simple_field_data):
+        field_name, _, _ = simple_field_data
+
+        errors = ReferenceDataRequest._parse_field_exceptions(field_exceptions)
+        expected_errors = {field_name: 'Invalid field'}
+
+        assert errors == expected_errors
+
+    def test___parse_errors__ignore_errors(self,
+                                           simple_field_data,
+                                           security_data_with_field_exception):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name],
+                                       error_behavior=ErrorBehaviour.IGNORE)
+
+        errors = request._parse_errors(security_data_with_field_exception)
+
+        assert errors is None
+
+    def test___parse_errors__raise_errors(self,
+                                          simple_field_data,
+                                          security_data_with_field_exception):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name],
+                                       error_behavior=ErrorBehaviour.RAISE)
+
+        with pytest.raises(BloombergException):
+            request._parse_errors(security_data_with_field_exception)
+
+    def test___parse_errors__return_errors__field_exception(
+            self,
+            simple_field_data,
+            security_data_with_field_exception):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name],
+                                       error_behavior=ErrorBehaviour.RETURN)
+
+        errors = request._parse_errors(security_data_with_field_exception)
+        expected_errors = {
+            security_id:
+                {
+                    field_name: 'Invalid field'
+                    }
+            }
+
+        assert errors == expected_errors
+
+    def test___parse_errors__return_errors__security_error(
+            self,
+            simple_field_data,
+            security_data_with_security_error):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name],
+                                       error_behavior=ErrorBehaviour.RETURN)
+
+        errors = request._parse_errors(security_data_with_security_error)
+        expected_errors = {
+            security_id: 'Invalid security',
+            }
+
+        assert errors == expected_errors

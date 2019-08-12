@@ -1,5 +1,5 @@
 """
-Emulate blpapi for test
+Emulate blpapi for tests
 please  use
 
 try:
@@ -9,6 +9,7 @@ except ImportError:
     # pylint: disable=ungrouped-imports
     from async_blp import env_test as blpapi
 """
+import enum
 import queue
 import threading
 from typing import Dict
@@ -17,6 +18,7 @@ from typing import Optional
 from typing import Union
 
 from async_blp.abs_handler import AbsHandler
+from async_blp.log import LOGGER
 
 
 # pylint: disable=invalid-name
@@ -28,7 +30,7 @@ class Event:
     """
     PARTIAL_RESPONSE = 'PARTIAL_RESPONSE'
     RESPONSE = 'RESPONSE'
-    OTHER = "other"
+    OTHER = 'other'
     SESSION_STATUS = 'SESSION_STATUS'
     SERVICE_STATUS = 'SERVICE_STATUS'
 
@@ -206,7 +208,8 @@ class Element:
                  children: Union[List['Element'], Dict[str, 'Element']] = None,
                  ):
         """
-        Crating only in test real blp give you element from request or msg
+        Init is only for tests; in real blpapi you receive already created
+        elements
         """
         self._name = name
         self._children = children or {}
@@ -214,12 +217,12 @@ class Element:
 
     def appendValue(self, *args, **kwargs):
         """
-        self.setValue(value, internals.ELEMENT_INDEX_END)
+        Equivalent to self.setValue(value, internals.ELEMENT_INDEX_END)
         """
 
     def get_children_str(self):
         """
-        for print
+        For pretty print; doesn't exist in real blpapi
         """
         if isinstance(self._children, list) and self._children:
             return '\n\t'.join([str(child)
@@ -246,13 +249,13 @@ class Element:
 
     def getValue(self):
         """
-        can be element or value
+        Can be element or value
         """
         return self._value
 
     def elements(self):
         """
-        Iterator over elements contained
+        Iterator over contained elements
         """
         if isinstance(self._children, dict):
             return list(self._children.values())
@@ -260,7 +263,7 @@ class Element:
 
     def values(self):
         """
-        Iterator over values contained
+        Iterator over contained values
         """
         return self.elements()
 
@@ -281,9 +284,9 @@ class Element:
         # this is not in accordance with Bloomberg
         return bool(self._children)
 
-    def getElementAsString(self, element_name):
+    def getElementAsString(self, element_name: str) -> str:
         """
-        str: This element's sub-element with ``name`` as a string
+        Return this element's sub-element with ``element_name`` as a string
         """
         return self.getElement(element_name).getValue()
 
@@ -293,13 +296,24 @@ class Element:
         """
         return self._name
 
-    def getElement(self, element_name):
+    def getElement(self, element_name: str) -> 'Element':
         """
-                be careful there no testing
-                """
+        Return child element; if you use it in tests, make sure that
+        `self.children` is a dict
+        """
         if isinstance(self._children, dict):
             return self._children[element_name]
+
         raise RuntimeError
+
+    def hasElement(self, element_name: str) -> bool:
+        """
+        Return True if child element with `element_name` exists
+        """
+        if isinstance(self._children, dict):
+            return element_name in self._children
+
+        raise False
 
 
 class Session:
@@ -308,12 +322,8 @@ class Session:
     """
 
     def __init__(self,
-                 options=None,
+                 options: SessionOptions = None,
                  eventHandler=None):
-        """
-        for each action we will create new thread
-        at init do nothing
-        """
 
         self.options = options
         self.handler = eventHandler
@@ -321,26 +331,36 @@ class Session:
 
     def startAsync(self):
         """
-        Start Bloomberg session in a separate thread
+        In real blpapi: start Bloomberg session in a separate thread.
+        For tests: do nothing, threads will be created later where necessary
         """
 
     def _async_start(self, handler: AbsHandler):
         """
-        last event type must be Event.RESPONSE
+        Doesn't exists in blpapi; for testing purposes only
+        Send all events from `self.events` to the handler one by one.
         """
         while not self.events.empty():
             event = self.events.get(timeout=1)
-            print(f'Calling handler with {event.eventType()}')
+            LOGGER.debug('Calling handler with %s', event.eventType())
             handler(event, handler.session)
 
     def openServiceAsync(self, *args, **kwargs):
         """
-        before you can get Service you need to open it
+        Before you can get a Service you need to open it
         """
 
     def send_event(self, event_: Event):
         """
-        for testing you must create correct events amd sent it by properly time
+        Doesn't exists in blpapi; for testing purposes only
+        Create new thread and send provided event to the handler
+
+        Events must be send in the following order:
+        1) SESSION_STATUS
+        2) SERVICE_STATUS
+        3) PARTIAL_RESPONSE
+        4) RESPONSE
+
         """
         self.events.put(event_)
         thread = threading.Thread(target=self._async_start,
@@ -350,6 +370,7 @@ class Session:
     def sendRequest(self, request, correlationId: CorrelationId):
         """
         all request immediately put close messages
+        (@georgy: could you clarify pls?)
         """
         e = Event(
             type_=Event.RESPONSE,
@@ -363,22 +384,20 @@ class Session:
     @staticmethod
     def getService(*args, **kwargs):
         """
-        blpapi will raise if  Service is not open , test will work
+        Just return new service; real blpapi will raise an exception
+        if service was not opened
         """
         return Service()
 
 
-class Name(str):
-    """
-    is same as str in blpapi there same optimization
-    """
+# real blpapi uses string optimization; for testing purposes just str will do
+Name = str
 
 
-# pylint: disable=too-few-public-methods
-class DataType:
+class DataType(enum.Enum):
     """
-    Contains the possible data types which can be represented in an
-    :class:`Element
+    Contains the possible data types which are represented in an
+    :class:`Element`
     """
     SEQUENCE = 'sequence'
     STRING = 'string'
