@@ -116,7 +116,10 @@ class ReferenceDataRequest:
         self._loop.call_soon_threadsafe(self._msg_queue.put_nowait, msg)
         LOGGER.debug('%s: message sent', self.__class__.__name__)
 
-    async def process(self) -> pd.DataFrame:
+    async def process(self
+                      ) -> Tuple[pd.DataFrame, Dict[str,
+                                                    Union[str,
+                                                          Dict[str, str]]]]:
         """
         Asynchronously process events from `msg_queue` until the event with
         event type RESPONSE is received. This method doesn't check if received
@@ -127,6 +130,7 @@ class ReferenceDataRequest:
         as security_ids.
         """
         dataframes = []
+        errors = {}
 
         while True:
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
@@ -147,17 +151,19 @@ class ReferenceDataRequest:
 
             dataframes.extend(msg_frames)
 
-        if dataframes:
-            return pd.concat(dataframes, axis=0)
+            for security_data in msg_data:
+                security_errors = self._parse_errors(security_data)
+                if security_errors:
+                    errors.update(security_errors)
 
-        return pd.DataFrame()
+        if dataframes:
+            return pd.concat(dataframes, axis=0), errors
+
+        return pd.DataFrame(), errors
 
     def _parse_security_data(self,
                              security_data,
-                             ) -> Tuple[pd.DataFrame,
-                                        Optional[Dict[str,
-                                                      Union[str,
-                                                            Dict[str, str]]]]]:
+                             ) -> pd.DataFrame:
         """
         Parse single security data element.
 
@@ -165,7 +171,6 @@ class ReferenceDataRequest:
         to the received fields.
         """
         security_id = security_data.getElementAsString(SECURITY)
-        security_errors = self._parse_errors(security_data)
 
         field_data: blpapi.Element = security_data.getElement(FIELD_DATA)
 
@@ -179,7 +184,7 @@ class ReferenceDataRequest:
 
             security_df.at[security_id, field_name] = field_value
 
-        return security_df, security_errors
+        return security_df
 
     def _parse_errors(self,
                       security_data,

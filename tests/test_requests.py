@@ -221,7 +221,7 @@ class TestReferenceDataRequest:
                                    columns=[field_name],
                                    )
 
-        actual_df, _ = request._parse_security_data(security_data)
+        actual_df = request._parse_security_data(security_data)
 
         pd.testing.assert_frame_equal(actual_df, required_df)
 
