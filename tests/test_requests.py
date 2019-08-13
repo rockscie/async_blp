@@ -3,8 +3,7 @@ import asyncio
 import pandas as pd
 import pytest
 
-from async_blp.env_test import Element
-from async_blp.requests import ErrorBehaviour
+from async_blp.async_blp import ErrorBehaviour
 from async_blp.requests import ReferenceDataRequest
 from async_blp.utils.blp_name import ERROR_INFO
 from async_blp.utils.blp_name import FIELD_DATA
@@ -14,7 +13,15 @@ from async_blp.utils.blp_name import MESSAGE
 from async_blp.utils.blp_name import SECURITY
 from async_blp.utils.blp_name import SECURITY_DATA
 from async_blp.utils.blp_name import SECURITY_ERROR
+from async_blp.utils.env_test import Element
 from async_blp.utils.exc import BloombergException
+
+
+# pylint does not like pytest.fixture but we do
+# pylint: disable=redefined-outer-name
+
+# we need protected access in tests
+# pylint: disable=protected-access
 
 
 @pytest.fixture()

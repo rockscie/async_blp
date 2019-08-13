@@ -5,20 +5,22 @@ File contains handler for ReferenceDataRequest
 import asyncio
 import uuid
 from typing import Dict
+from typing import Iterable
 from typing import List
 from typing import Optional
 
 from async_blp.abs_handler import AbsHandler
-from async_blp.log import LOGGER
 from async_blp.requests import ReferenceDataRequest
+from async_blp.utils import log
+from async_blp.utils.blp_name import RESPONSE_ERROR
 
 # pylint: disable=ungrouped-imports
 try:
     import blpapi
 except ImportError:
-    from async_blp import env_test as blpapi
+    from async_blp.utils import env_test as blpapi
 
-RESPONSE_ERROR = blpapi.Name('responseError')
+LOGGER = log.get_logger()
 
 
 class HandlerRef(AbsHandler):
@@ -75,7 +77,9 @@ class HandlerRef(AbsHandler):
 
             blp_request = request.create(service)
             self.session.sendRequest(blp_request, correlationId=corr_id)
-            LOGGER.debug('%s: request send', self.__class__.__name__)
+            LOGGER.debug('%s: request send:\n%s',
+                         self.__class__.__name__,
+                         blp_request)
 
     async def _get_service(self, service_name: str) -> blpapi.Service:
         """
@@ -93,9 +97,9 @@ class HandlerRef(AbsHandler):
         return service
 
     @staticmethod
-    def _close_requests(requests: List[ReferenceDataRequest]):
+    def _close_requests(requests: Iterable[ReferenceDataRequest]):
         """
-        Notify requests that their last event was received (i.e., send None to
+        Notify requests that their last event was sent (i.e., send None to
         their queue)
         """
         for request in requests:
@@ -111,9 +115,9 @@ class HandlerRef(AbsHandler):
                         for cor_id in msg.correlationIds()]
             self._close_requests(requests)
 
-            LOGGER.debug('%s: error message received: %s',
+            LOGGER.debug('%s: error message received:\n%s',
                          self.__class__.__name__,
-                         msg.getElement(RESPONSE_ERROR))
+                         msg)
             return True
 
         return False
@@ -131,7 +135,7 @@ class HandlerRef(AbsHandler):
             self.loop.call_soon_threadsafe(self.session_started.set)
 
         if msg.asElement().name() == 'SessionStopped':
-            LOGGER.debug('%s: session opened', self.__class__.__name__)
+            LOGGER.debug('%s: session stopped', self.__class__.__name__)
             self.loop.call_soon_threadsafe(self.session_stopped.set)
 
     def _service_handler(self, event_: blpapi.Event):
@@ -190,4 +194,10 @@ class HandlerRef(AbsHandler):
         self.method_map[event.eventType()](event)
 
     def stop_session(self):
+        """
+        Close all requests and begin the process to stop session.
+        Application must wait for the `session_stopped` event to be set before
+        deleting this handler, otherwise, the main thread can hang forever
+        """
+        self._close_requests(self.requests.values())
         self.session.stopAsync()

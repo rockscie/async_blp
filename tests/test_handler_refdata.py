@@ -122,9 +122,9 @@ class TestHandleRef:
         assert handler.services['test'].is_set()
 
     async def test__send_requests__correlation_id(self,
-                                    session_options,
-                                    data_request,
-                                    ):
+                                                  session_options,
+                                                  data_request,
+                                                  ):
         """
         Check that different correlation id is created for each request
         """

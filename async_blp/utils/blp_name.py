@@ -6,7 +6,7 @@ String optimizaton for blpapi
 try:
     import blpapi
 except ImportError:
-    from async_blp import env_test as blpapi
+    from async_blp.utils import env_test as blpapi
 
 REFERENCE_DATA_RESPONSE = blpapi.Name("ReferenceDataResponse")
 HISTORICAL_DATA_RESPONSE = blpapi.Name("HistoricalDataResponse")

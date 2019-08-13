@@ -1,1 +1,1 @@
-from .async_blp import get_reference_data
+from .async_blp import AsyncBloomberg

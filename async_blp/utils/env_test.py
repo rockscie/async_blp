@@ -18,7 +18,9 @@ from typing import Optional
 from typing import Union
 
 from async_blp.abs_handler import AbsHandler
-from async_blp.log import LOGGER
+from async_blp.utils import log
+
+LOGGER = log.get_logger()
 
 
 # pylint: disable=invalid-name
@@ -154,7 +156,8 @@ class Message:
     Contains low-level Bloomberg data
     """
 
-    def __init__(self, name, value, children: Dict[str, 'Element'] = None,
+    def __init__(self, name, value,
+                 children: Dict[str, 'Element'] = None,
                  correlationId: Optional[CorrelationId] = None):
         self._name = name
         self._children = children or {}
@@ -194,6 +197,11 @@ class Message:
         """
         return self._children[element_name]
 
+    def __str__(self):
+        return str(self.asElement())
+
+    __repr__ = __str__
+
 
 class Element:
     """
@@ -220,30 +228,34 @@ class Element:
         Equivalent to self.setValue(value, internals.ELEMENT_INDEX_END)
         """
 
-    def get_children_str(self):
+    def get_string(self, offset=0):
         """
-        For pretty print; doesn't exist in real blpapi
+        Pretty printing; doesn't exist in blpapi
         """
-        if isinstance(self._children, list) and self._children:
-            return '\n\t'.join([str(child)
-                                for child in self._children])
+        offset_str = ' ' * offset
 
-        if isinstance(self._children, dict) and self._children:
-            return '\n\t'.join([f'{name} = {child.get_children_str()}'
-                                for name, child in self._children.items()])
-
-        return f'\t{self._value}'
-
-    def __str__(self):
         if not self._children:
-            return f'{self._name} = {self._value}'
+            return f'{offset_str}{self._name} = {self._value}'
 
         if isinstance(self._children, list):
+            children_str = '\n'.join(child.get_string(offset + 2)
+                                     for child in self._children)
             suffix = '[]'
-        else:
+
+        elif isinstance(self._children, dict):
+            children_str = '\n'.join(f'{child.get_string(offset + 2)}'
+                                     for child
+                                     in self._children.values())
             suffix = '{}'
 
-        return f'{self._name}{suffix} = {{\n {self.get_children_str()} \n  }}'
+        else:
+            raise RuntimeError(f'Unknown children type: {type(self._children)}')
+
+        return (f'{offset_str}{self._name}{suffix} = {{\n{children_str}\n'
+                f'{offset_str}}}')
+
+    def __str__(self):
+        return self.get_string()
 
     __repr__ = __str__
 
@@ -313,7 +325,7 @@ class Element:
         if isinstance(self._children, dict):
             return element_name in self._children
 
-        raise False
+        return False
 
 
 class Session:

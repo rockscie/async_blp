@@ -3,7 +3,6 @@ Thus module contains wrappers for different types of Bloomberg requests
 """
 import asyncio
 import datetime as dt
-import enum
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -12,7 +11,9 @@ from typing import Union
 
 import pandas as pd
 
-from async_blp.log import LOGGER
+from async_blp.async_blp import ErrorBehaviour
+from async_blp.async_blp import SecurityIdType
+from async_blp.utils import log
 from async_blp.utils.blp_name import ERROR_INFO
 from async_blp.utils.blp_name import FIELD_DATA
 from async_blp.utils.blp_name import FIELD_EXCEPTIONS
@@ -23,45 +24,16 @@ from async_blp.utils.blp_name import SECURITY_DATA
 from async_blp.utils.blp_name import SECURITY_ERROR
 from async_blp.utils.exc import BloombergException
 
+# pylint: disable=ungrouped-imports
 try:
     import blpapi
 except ImportError:
-    from async_blp import env_test as blpapi
+    from async_blp.utils import env_test as blpapi
 
 BloombergValue = Union[str, int, float, dt.date, dt.datetime,
                        Dict[str, Union[str, int, float, dt.date, dt.datetime]]]
 
-
-class SecurityIdType(enum.Enum):
-    """
-    Some of the possible security identifier types. For more information see
-    https://www.bloomberg.com/professional/support/api-library/
-    """
-    TICKER = '/ticker/'
-    ISIN = '/isin/'
-    CUSIP = '/cusip/'
-    SEDOL = '/sedol/'
-
-    BL_SECURITY_IDENTIFIER = '/bsid/'
-    BL_SECURITY_SYMBOL = '/bsym/'
-    BL_UNIQUE_IDENTIFIER = '/buid/'
-    BL_GLOBAL_IDENTIFIER = '/bbgid'
-
-    def __str__(self):
-        return self.value
-
-
-class ErrorBehaviour(enum.Enum):
-    """
-    Enum of supported error behaviours.
-
-    RAISE - raise exception when Bloomberg reports an error
-    RETURN - return all errors in a separate dict
-    IGNORE - ignore all errors
-    """
-    RAISE = 'raise'
-    RETURN = 'return'
-    IGNORE = 'ignore'
+LOGGER = log.get_logger()
 
 
 class ReferenceDataRequest:
@@ -71,6 +43,7 @@ class ReferenceDataRequest:
     service_name = "//blp/refdata"
     request_name = "ReferenceDataRequest"
 
+    # pylint: disable=too-many-arguments
     def __init__(self,
                  securities: List[str],
                  fields: List[str],
