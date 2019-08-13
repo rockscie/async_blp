@@ -36,4 +36,9 @@ async def get_reference_data(
 
     handler = HandlerRef(session_options)
     asyncio.create_task(handler.send_requests([request]))
-    return await request.process()
+    data, errors = await request.process()
+
+    handler.stop_session()
+    await handler.session_stopped.wait()
+
+    return data, errors
