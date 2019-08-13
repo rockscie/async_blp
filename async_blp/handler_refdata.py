@@ -134,7 +134,7 @@ class HandlerRef(AbsHandler):
             LOGGER.debug('%s: session opened', self.__class__.__name__)
             self.loop.call_soon_threadsafe(self.session_started.set)
 
-        if msg.asElement().name() == 'SessionStopped':
+        if msg.asElement().name() == 'SessionTerminated':
             LOGGER.debug('%s: session stopped', self.__class__.__name__)
             self.loop.call_soon_threadsafe(self.session_stopped.set)
 
@@ -197,7 +197,7 @@ class HandlerRef(AbsHandler):
         """
         Close all requests and begin the process to stop session.
         Application must wait for the `session_stopped` event to be set before
-        deleting this handler, otherwise, the main thread can hang forever
+        deleting this handler, otherwise the main thread can hang forever
         """
         self._close_requests(self.requests.values())
         self.session.stopAsync()

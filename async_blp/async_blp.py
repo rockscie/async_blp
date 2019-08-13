@@ -47,7 +47,7 @@ class AsyncBloomberg:
 
         log.set_logger(log_level)
 
-    def stop(self):
+    async def stop(self):
         """
         Stop all started sessions. If you try to use `AsyncBloomberg` after
         calling this method, it will attempt to open new sessions.
@@ -55,7 +55,7 @@ class AsyncBloomberg:
         If you stop session before receiving full response from Bloomberg,
         you may lose some of the data.
 
-        This method will be blocked until all handlers successfully
+        This method waits for all handlers to successfully
         stop their sessions.
         """
         for handler in self._handlers:
@@ -64,7 +64,7 @@ class AsyncBloomberg:
         all_events = [handler.session_stopped.wait()
                       for handler in self._handlers]
 
-        asyncio.gather(*all_events)
+        await asyncio.gather(*all_events)
 
     async def get_reference_data(
             self,

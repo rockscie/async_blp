@@ -69,7 +69,7 @@ def stop_session_event():
     after user calls `session.stopAsync`
     """
     event_ = Event(type_=Event.SESSION_STATUS,
-                   msgs=[Message(value=0, name='SessionStopped'), ]
+                   msgs=[Message(value=0, name='SessionTerminated'), ]
                    )
     return event_
 
