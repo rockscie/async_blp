@@ -9,10 +9,10 @@ from typing import Iterable
 from typing import List
 from typing import Optional
 
-from async_blp.abs_handler import AbsHandler
-from async_blp.requests import ReferenceDataRequest
-from async_blp.utils import log
-from async_blp.utils.blp_name import RESPONSE_ERROR
+from .abs_handler import AbsHandler
+from .requests import ReferenceDataRequest
+from .utils.blp_name import RESPONSE_ERROR
+from .utils.log import get_logger
 
 # pylint: disable=ungrouped-imports
 try:
@@ -20,7 +20,7 @@ try:
 except ImportError:
     from async_blp.utils import env_test as blpapi
 
-LOGGER = log.get_logger()
+LOGGER = get_logger()
 
 
 class HandlerRef(AbsHandler):

@@ -3,7 +3,7 @@ import asyncio
 import pandas as pd
 import pytest
 
-from async_blp.async_blp import ErrorBehaviour
+from async_blp.enums import ErrorBehaviour
 from async_blp.requests import ReferenceDataRequest
 from async_blp.utils.blp_name import ERROR_INFO
 from async_blp.utils.blp_name import FIELD_DATA

@@ -2,14 +2,15 @@
 high level Api
 """
 import asyncio
-import enum
 import logging
 from typing import List
 from typing import Optional
 
-from async_blp.handler_refdata import HandlerRef
-from async_blp.requests import ReferenceDataRequest
-from async_blp.utils import log
+from .enums import ErrorBehaviour
+from .enums import SecurityIdType
+from .handler_refdata import HandlerRef
+from .requests import ReferenceDataRequest
+from .utils import log
 
 # pylint: disable=ungrouped-imports
 try:
@@ -18,40 +19,6 @@ except ImportError:
     from async_blp.utils import env_test as blpapi
 
 LOGGER = log.get_logger()
-
-
-class SecurityIdType(enum.Enum):
-    """
-    Some of the possible security identifier types. For more information see
-    https://www.bloomberg.com/professional/support/api-library/
-    """
-    TICKER = '/ticker/'
-    ISIN = '/isin/'
-    CUSIP = '/cusip/'
-    SEDOL = '/sedol/'
-
-    BL_SECURITY_IDENTIFIER = '/bsid/'
-    BL_SECURITY_SYMBOL = '/bsym/'
-    BL_UNIQUE_IDENTIFIER = '/buid/'
-    BL_GLOBAL_IDENTIFIER = '/bbgid'
-
-    def __str__(self):
-        return self.value
-
-
-class ErrorBehaviour(enum.Enum):
-    """
-    Enum of supported error behaviours.
-
-    RAISE - raise exception when Bloomberg reports an error
-    RETURN - return all errors in a separate dict
-    IGNORE - ignore all errors
-    WARN - print warnings
-    """
-    RAISE = 'raise'
-    RETURN = 'return'
-    IGNORE = 'ignore'
-    WARN = 'warn'
 
 
 class AsyncBloomberg:
