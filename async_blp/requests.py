@@ -13,34 +13,20 @@ from typing import Union
 import pandas as pd
 
 from async_blp.log import LOGGER
+from async_blp.utils.blp_name import ERROR_INFO
+from async_blp.utils.blp_name import FIELD_DATA
+from async_blp.utils.blp_name import FIELD_EXCEPTIONS
+from async_blp.utils.blp_name import FIELD_ID
+from async_blp.utils.blp_name import MESSAGE
+from async_blp.utils.blp_name import SECURITY
+from async_blp.utils.blp_name import SECURITY_DATA
+from async_blp.utils.blp_name import SECURITY_ERROR
+from async_blp.utils.exc import BloombergException
 
 try:
     import blpapi
 except ImportError:
     from async_blp import env_test as blpapi
-
-REFERENCE_DATA_RESPONSE = blpapi.Name("ReferenceDataResponse")
-HISTORICAL_DATA_RESPONSE = blpapi.Name("HistoricalDataResponse")
-MARKET_DATA_EVENTS = blpapi.Name("MarketDataEvents")
-RESPONSE_ERROR = blpapi.Name("responseError")
-SECURITY_DATA = blpapi.Name("securityData")
-SECURITY_ERROR = blpapi.Name("securityError")
-ID = blpapi.Name("id")
-ERROR_INFO = blpapi.Name("errorInfo")
-MESSAGE = blpapi.Name("message")
-FIELD_ID = blpapi.Name('fieldId')
-FIELD_MNEMONIC = blpapi.Name("mnemonic")
-FIELD_DATA = blpapi.Name("fieldData")
-FIELD_INFO = blpapi.Name('fieldInfo')
-FIELD_DATA_TYPE = blpapi.Name('datatype')
-FIELD_DESC = blpapi.Name("description")
-FIELD_DOC = blpapi.Name("documentation")
-SECURITY = blpapi.Name("security")
-CATEGORY = blpapi.Name("category")
-CATEGORY_NAME = blpapi.Name("categoryName")
-CATEGORY_ID = blpapi.Name("categoryId")
-EXCLUDE = blpapi.Name("exclude")
-FIELD_EXCEPTIONS = blpapi.Name('fieldExceptions')
 
 BloombergValue = Union[str, int, float, dt.date, dt.datetime,
                        Dict[str, Union[str, int, float, dt.date, dt.datetime]]]
@@ -65,6 +51,19 @@ class SecurityIdType(enum.Enum):
         return self.value
 
 
+class ErrorBehaviour(enum.Enum):
+    """
+    Enum of supported error behaviours.
+
+    RAISE - raise exception when Bloomberg reports an error
+    RETURN - return all errors in a separate dict
+    IGNORE - ignore all errors
+    """
+    RAISE = 'raise'
+    RETURN = 'return'
+    IGNORE = 'ignore'
+
+
 class ReferenceDataRequest:
     """
     Convenience wrapper around Bloomberg's ReferenceDataRequest
@@ -77,12 +76,14 @@ class ReferenceDataRequest:
                  fields: List[str],
                  security_id_type: Optional[SecurityIdType] = None,
                  overrides: Optional[Dict] = None,
+                 error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
                  ):
 
-        self.securities = securities
-        self.fields = fields
-        self.security_id_type = security_id_type
-        self.overrides = overrides or {}
+        self._securities = securities
+        self._fields = fields
+        self._security_id_type = security_id_type
+        self._overrides = overrides or {}
+        self._error_behaviour = error_behavior
 
         try:
             self._loop = asyncio.get_running_loop()
@@ -115,7 +116,10 @@ class ReferenceDataRequest:
         self._loop.call_soon_threadsafe(self._msg_queue.put_nowait, msg)
         LOGGER.debug('%s: message sent', self.__class__.__name__)
 
-    async def process(self) -> pd.DataFrame:
+    async def process(self
+                      ) -> Tuple[pd.DataFrame, Dict[str,
+                                                    Union[str,
+                                                          Dict[str, str]]]]:
         """
         Asynchronously process events from `msg_queue` until the event with
         event type RESPONSE is received. This method doesn't check if received
@@ -126,6 +130,7 @@ class ReferenceDataRequest:
         as security_ids.
         """
         dataframes = []
+        errors = {}
 
         while True:
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
@@ -146,12 +151,19 @@ class ReferenceDataRequest:
 
             dataframes.extend(msg_frames)
 
+            for security_data in msg_data:
+                security_errors = self._parse_errors(security_data)
+                if security_errors:
+                    errors.update(security_errors)
+
         if dataframes:
-            return pd.concat(dataframes, axis=0)
+            return pd.concat(dataframes, axis=0), errors
 
-        return pd.DataFrame()
+        return pd.DataFrame(), errors
 
-    def _parse_security_data(self, security_data) -> pd.DataFrame:
+    def _parse_security_data(self,
+                             security_data,
+                             ) -> pd.DataFrame:
         """
         Parse single security data element.
 
@@ -159,9 +171,6 @@ class ReferenceDataRequest:
         to the received fields.
         """
         security_id = security_data.getElementAsString(SECURITY)
-        # security_errors = security_data.getElement(SECURITY_ERROR)
-        # field_errors = security_data.getElement(FIELD_EXCEPTIONS)
-        # todo clean security id, save errors
 
         field_data: blpapi.Element = security_data.getElement(FIELD_DATA)
 
@@ -176,6 +185,57 @@ class ReferenceDataRequest:
             security_df.at[security_id, field_name] = field_value
 
         return security_df
+
+    def _parse_errors(self,
+                      security_data,
+                      ) -> Optional[Dict[str,
+                                         Union[str,
+                                               Dict[str, str]]]]:
+        """
+        Check if the given security data has any errors and process them
+        according to `self._error_behaviour`
+
+        Return None if exceptions are ignored, or dict containing security
+        and field error messages
+        """
+        if self._error_behaviour == ErrorBehaviour.IGNORE:
+            return None
+
+        security_id = security_data.getElementAsString(SECURITY)
+        security_errors = {}
+
+        if security_data.hasElement(SECURITY_ERROR):
+            security_errors[security_id] = 'Invalid security'
+
+        if security_data.hasElement(FIELD_EXCEPTIONS):
+            field_exceptions = security_data.getElement(FIELD_EXCEPTIONS)
+            field_errors = self._parse_field_exceptions(field_exceptions)
+
+            if field_errors:
+                security_errors[security_id] = field_errors
+
+        if self._error_behaviour == ErrorBehaviour.RAISE and security_errors:
+            raise BloombergException(security_errors)
+
+        return security_errors
+
+    @staticmethod
+    def _parse_field_exceptions(field_exceptions) -> Dict[str, str]:
+        """
+        Parse field exceptions for one security.
+
+        Return dict {field name : error message}
+        """
+        errors = {}
+
+        for error in field_exceptions.values():
+            field = error.getElementAsString(FIELD_ID)
+            error_info = error.getElement(ERROR_INFO)
+            message = error_info.getElementAsString(MESSAGE)
+
+            errors[field] = message
+
+        return errors
 
     def _parse_field_data(self,
                           field: blpapi.Element,
@@ -227,19 +287,19 @@ class ReferenceDataRequest:
         """
         request = service.createRequest(self.request_name)
 
-        if self.security_id_type is None:
+        if self._security_id_type is None:
             prefix = ''
         else:
-            prefix = str(self.security_id_type)
+            prefix = str(self._security_id_type)
 
-        for name in self.securities:
+        for name in self._securities:
             name = prefix + name
             request.getElement("securities").appendValue(name)
 
-        for field in self.fields:
+        for field in self._fields:
             request.getElement("fields").appendValue(field)
 
-        for key, value in self.overrides.items():
+        for key, value in self._overrides.items():
             request.set(key, value)
 
         return request

@@ -12,11 +12,10 @@ from async_blp.abs_handler import AbsHandler
 from async_blp.log import LOGGER
 from async_blp.requests import ReferenceDataRequest
 
+# pylint: disable=ungrouped-imports
 try:
-    # pylint: disable=ungrouped-imports
     import blpapi
 except ImportError:
-    # pylint: disable=ungrouped-imports
     from async_blp import env_test as blpapi
 
 RESPONSE_ERROR = blpapi.Name('responseError')
@@ -33,7 +32,8 @@ class HandlerRef(AbsHandler):
 
         super().__init__()
         self.requests: Dict[blpapi.CorrelationId, ReferenceDataRequest] = {}
-        self.connection = asyncio.Event()
+        self.session_started = asyncio.Event()
+        self.session_stopped = asyncio.Event()
         self.services: Dict[str, asyncio.Event] = {}
         self.session = blpapi.Session(options=session_options,
                                       eventHandler=self)
@@ -64,8 +64,7 @@ class HandlerRef(AbsHandler):
         Wait until session is started and required service is opened,
         then send requests
         """
-        # wait until the session is opened
-        await self.connection.wait()
+        await self.session_started.wait()
 
         for request in requests:
             corr_id = blpapi.CorrelationId(uuid.uuid4())
@@ -121,14 +120,19 @@ class HandlerRef(AbsHandler):
 
     def _session_handler(self, event_: blpapi.Event):
         """
-        Process blpapi.Event.SESSION_STATUS events. If session is successfully
-        started, set `self.connection`
+        Process blpapi.Event.SESSION_STATUS events.
+        If session is successfully started, set `self.session_started`
+        If session is successfully stopped, set `self.session_stopped`
         """
         msg = list(event_)[0]
 
         if msg.asElement().name() == 'SessionStarted':
             LOGGER.debug('%s: session opened', self.__class__.__name__)
-            self.loop.call_soon_threadsafe(self.connection.set)
+            self.loop.call_soon_threadsafe(self.session_started.set)
+
+        if msg.asElement().name() == 'SessionStopped':
+            LOGGER.debug('%s: session opened', self.__class__.__name__)
+            self.loop.call_soon_threadsafe(self.session_stopped.set)
 
     def _service_handler(self, event_: blpapi.Event):
         """
@@ -184,3 +188,6 @@ class HandlerRef(AbsHandler):
                      self.__class__.__name__,
                      event.eventType())
         self.method_map[event.eventType()](event)
+
+    def stop_session(self):
+        self.session.stopAsync()

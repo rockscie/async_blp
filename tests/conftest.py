@@ -1,8 +1,9 @@
 """
-all fixture is samples of blpapi events
+All fixtures are samples of blpapi events
 
-this events must be sent in session in property time
-
+For testing purposes, please use `Session.send_event` method, that emulates
+blpapi and opens another thread. You can also call the needed handler method
+directly.
 """
 
 import pytest
@@ -46,6 +47,18 @@ def open_session_event():
     """
     event_ = Event(type_=Event.SESSION_STATUS,
                    msgs=[Message(value=0, name='SessionStarted'), ]
+                   )
+    return event_
+
+
+@pytest.fixture()
+def stop_session_event():
+    """
+    SessionStopped event that is the very last event that Bloomberg sends,
+    after user calls `session.stopAsync`
+    """
+    event_ = Event(type_=Event.SESSION_STATUS,
+                   msgs=[Message(value=0, name='SessionStopped'), ]
                    )
     return event_
 
