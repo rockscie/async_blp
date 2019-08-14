@@ -8,7 +8,7 @@ from typing import Optional
 
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
-from .handler_refdata import HandlerRef
+from .handler_refdata import RequestHandler
 from .requests import ReferenceDataRequest
 from .utils import log
 
@@ -43,7 +43,7 @@ class AsyncBloomberg:
         self._session_options.setServerHost(host)
         self._session_options.setServerPort(port)
 
-        self._handlers: List[HandlerRef] = []
+        self._handlers: List[RequestHandler] = []
 
         log.set_logger(log_level)
 
@@ -80,7 +80,7 @@ class AsyncBloomberg:
         if self._handlers:
             handler = self._handlers[0]
         else:
-            handler = HandlerRef(self._session_options)
+            handler = RequestHandler(self._session_options)
             self._handlers.append(handler)
 
         request = ReferenceDataRequest(securities, fields, security_id_type,

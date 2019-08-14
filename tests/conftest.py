@@ -124,3 +124,13 @@ def error_event(msg_daily_reached):
                      msg_daily_reached,
                      ],
                  )
+
+
+@pytest.fixture()
+def non_error_message():
+    return Message(name="validMessage",
+                   value='',
+                   children={
+                       "validMessage": element_daily_reached
+                       }
+                   )

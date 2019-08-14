@@ -23,7 +23,7 @@ except ImportError:
 LOGGER = get_logger()
 
 
-class HandlerRef(AbsHandler):
+class RequestHandler(AbsHandler):
     """
     Handler gets response events from Bloomberg from other thread,
     then puts it to request queue. Each handler opens its own session
@@ -33,10 +33,12 @@ class HandlerRef(AbsHandler):
                  session_options: blpapi.SessionOptions):
 
         super().__init__()
-        self.requests: Dict[blpapi.CorrelationId, ReferenceDataRequest] = {}
+        self.current_requests: Dict[blpapi.CorrelationId,
+                                    ReferenceDataRequest] = {}
         self.session_started = asyncio.Event()
         self.session_stopped = asyncio.Event()
         self.services: Dict[str, asyncio.Event] = {}
+
         self.session = blpapi.Session(options=session_options,
                                       eventHandler=self)
 
@@ -70,7 +72,7 @@ class HandlerRef(AbsHandler):
 
         for request in requests:
             corr_id = blpapi.CorrelationId(uuid.uuid4())
-            self.requests[corr_id] = request
+            self.current_requests[corr_id] = request
 
             # wait until the necessary service is opened
             service = await self._get_service(request.service_name)
@@ -96,27 +98,27 @@ class HandlerRef(AbsHandler):
         service = self.session.getService(service_name)
         return service
 
-    @staticmethod
-    def _close_requests(requests: Iterable[ReferenceDataRequest]):
+    def _close_requests(self, corr_ids: Iterable[blpapi.CorrelationId]):
         """
         Notify requests that their last event was sent (i.e., send None to
-        their queue)
+        their queue) and delete from requests dict
         """
-        for request in requests:
+        for corr_id in corr_ids:
+            request = self.current_requests[corr_id]
             request.send_queue_message(None)
 
-    def _is_error_msg(self, msg: blpapi.Message) -> bool:
+            del self.current_requests[corr_id]
+
+    @classmethod
+    def _is_error_msg(cls, msg: blpapi.Message) -> bool:
         """
         Return True if msg contains responseError element. It indicates errors
         such as lost connection, request limit reached etc.
         """
         if msg.hasElement(RESPONSE_ERROR):
-            requests = [self.requests[cor_id]
-                        for cor_id in msg.correlationIds()]
-            self._close_requests(requests)
 
             LOGGER.debug('%s: error message received:\n%s',
-                         self.__class__.__name__,
+                         cls.__name__,
                          msg)
             return True
 
@@ -163,10 +165,11 @@ class HandlerRef(AbsHandler):
         for msg in event_:
 
             if self._is_error_msg(msg):
+                self._close_requests(msg.correlationIds())
                 continue
 
             for cor_id in msg.correlationIds():
-                request = self.requests[cor_id]
+                request = self.current_requests[cor_id]
                 request.send_queue_message(msg)
 
     def _response_handler(self, event_: blpapi.Event):
@@ -178,10 +181,7 @@ class HandlerRef(AbsHandler):
         self._partial_handler(event_)
 
         for msg in event_:
-            requests = [self.requests[cor_id]
-                        for cor_id in msg.correlationIds()]
-
-            self._close_requests(requests)
+            self._close_requests(msg.correlationIds())
 
     def __call__(self, event: blpapi.Event, session: Optional[blpapi.Session]):
         """
@@ -199,5 +199,5 @@ class HandlerRef(AbsHandler):
         Application must wait for the `session_stopped` event to be set before
         deleting this handler, otherwise the main thread can hang forever
         """
-        self._close_requests(self.requests.values())
+        self._close_requests(self.current_requests.keys())
         self.session.stopAsync()

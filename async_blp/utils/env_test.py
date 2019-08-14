@@ -64,19 +64,15 @@ class Event:
 
 class CorrelationId:
     """
-    id for mapping request and response
     A key used to identify individual subscriptions or requests.
     """
 
     def __init__(self, id_):
-        """
-        Value is only important
-        """
         self.id_ = id_
 
     def value(self):
         """
-        blpapi uses method instead of attributes
+        blpapi uses methods instead of attributes
         """
         return self.id_
 

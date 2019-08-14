@@ -2,17 +2,18 @@
 Test handler for ReferenceDataRequest
 """
 import asyncio
+import uuid
 
 import pytest
 
-from async_blp.handler_refdata import HandlerRef
+from async_blp.handler_refdata import RequestHandler
+# we need protected access in tests
+# pylint: disable=protected-access
+from async_blp.utils.env_test import CorrelationId
 
 
 # pylint does not like pytest.fixture but we do
 # pylint: disable=redefined-outer-name
-
-# we need protected access in tests
-# pylint: disable=protected-access
 
 
 @pytest.mark.asyncio
@@ -31,7 +32,7 @@ class TestHandleRef:
         Check that receiving `SessionStarted` blpapi event correctly sets the
         `HandlerRef.session_started` asyncio event
         """
-        handler = HandlerRef(session_options)
+        handler = RequestHandler(session_options)
         assert not handler.session_started.is_set()
 
         # in blpapi this happens under the hood
@@ -50,7 +51,7 @@ class TestHandleRef:
         `HandlerRef.session_started` asyncio event when handler is called from
         a different thread
         """
-        handler = HandlerRef(session_options)
+        handler = RequestHandler(session_options)
         assert not handler.session_started.is_set()
 
         # in blpapi this happens under the hood
@@ -68,7 +69,7 @@ class TestHandleRef:
         Check that receiving `SessionStopped` blpapi event correctly sets the
         `HandlerRef.session_stopped` asyncio event
         """
-        handler = HandlerRef(session_options)
+        handler = RequestHandler(session_options)
         assert not handler.session_stopped.is_set()
 
         # in blpapi this happens under the hood
@@ -84,7 +85,7 @@ class TestHandleRef:
         Check that receiving `ServiceOpened` blpapi event correctly sets the
         corresponding asyncio event
         """
-        handler = HandlerRef(session_options)
+        handler = RequestHandler(session_options)
         handler.services['test'] = asyncio.Event()
 
         handler.session.send_event(open_service_event)
@@ -99,7 +100,7 @@ class TestHandleRef:
         corresponding asyncio event when handler is called from
         a different thread
         """
-        handler = HandlerRef(session_options)
+        handler = RequestHandler(session_options)
         handler.services['test'] = asyncio.Event()
 
         handler.session.send_event(open_service_event)
@@ -113,7 +114,7 @@ class TestHandleRef:
         """
         Check that `get_service()` waits for the correct event
         """
-        handler = HandlerRef(session_options)
+        handler = RequestHandler(session_options)
         task = asyncio.create_task(handler._get_service('test'))
         await asyncio.sleep(0.00001)
 
@@ -128,7 +129,7 @@ class TestHandleRef:
         """
         Check that different correlation id is created for each request
         """
-        handler = HandlerRef(session_options)
+        handler = RequestHandler(session_options)
         handler.session_started.set()
 
         task = asyncio.create_task(handler.send_requests([data_request]))
@@ -136,25 +137,39 @@ class TestHandleRef:
 
         data_request.loop = asyncio.get_running_loop()
         await asyncio.sleep(0.00001)
-        assert len(handler.requests) > 1, "all requests must have their own id"
+        assert len(
+            handler.current_requests) > 1, "all requests must have their own id"
 
         task.cancel()
         task1.cancel()
 
-    async def test_call_limit(self,
-                              session_options,
-                              data_request,
-                              msg_daily_reached,
-                              ):
+    async def test___close_requests(self,
+                                    session_options,
+                                    data_request,
+                                    msg_daily_reached,
+                                    ):
         """
-        @georgy please clarify what it does
+        `close_requests` should send `None` to request's queue and remove
+        request from current requests dict
         """
 
-        handler = HandlerRef(session_options)
+        handler = RequestHandler(session_options)
         data_request.set_running_loop_as_default()
-        handler._close_requests([data_request])
-        assert await data_request._msg_queue.get() is None
 
-        handler.requests[None] = data_request
-        handler._is_error_msg(msg_daily_reached)
+        corr_id = CorrelationId(uuid.uuid4())
+        handler.current_requests[corr_id] = data_request
+
+        handler._close_requests([corr_id])
+
         assert await data_request._msg_queue.get() is None
+        assert not handler.current_requests
+
+    async def test__is_error_msg__daily_limit(self,
+                                              msg_daily_reached,
+                                              ):
+        assert RequestHandler._is_error_msg(msg_daily_reached)
+
+    async def test__is_error_msg__non_error_msg(self,
+                                                non_error_message,
+                                                ):
+        assert not RequestHandler._is_error_msg(non_error_message)
