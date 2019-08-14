@@ -99,7 +99,7 @@ class AsyncBloomberg:
             handler = self._choose_handler()
 
             request = ReferenceDataRequest(security_chunk,
-                                           fields,
+                                           fields_chunk,
                                            security_id_type,
                                            overrides,
                                            self._error_behaviour,
@@ -117,7 +117,6 @@ class AsyncBloomberg:
             errors.update(error)
 
         return result_df, errors
-
 
     def _choose_handler(self) -> RequestHandler:
         """
