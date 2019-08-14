@@ -276,3 +276,11 @@ class ReferenceDataRequest:
             request.set(key, value)
 
         return request
+
+    @property
+    def weight(self):
+        """
+        Approximate number of returned values; used to balance load
+        between handlers
+        """
+        return len(self._securities) * len(self._fields)

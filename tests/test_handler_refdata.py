@@ -7,10 +7,11 @@ import uuid
 import pytest
 
 from async_blp.handler_refdata import RequestHandler
-# we need protected access in tests
-# pylint: disable=protected-access
 from async_blp.utils.env_test import CorrelationId
 
+
+# we need protected access in tests
+# pylint: disable=protected-access
 
 # pylint does not like pytest.fixture but we do
 # pylint: disable=redefined-outer-name
@@ -138,7 +139,7 @@ class TestHandleRef:
         data_request.loop = asyncio.get_running_loop()
         await asyncio.sleep(0.00001)
         assert len(
-            handler.current_requests) > 1, "all requests must have their own id"
+            handler._current_requests) > 1, "all requests must have their own id"
 
         task.cancel()
         task1.cancel()
@@ -157,12 +158,12 @@ class TestHandleRef:
         data_request.set_running_loop_as_default()
 
         corr_id = CorrelationId(uuid.uuid4())
-        handler.current_requests[corr_id] = data_request
+        handler._current_requests[corr_id] = data_request
 
         handler._close_requests([corr_id])
 
         assert await data_request._msg_queue.get() is None
-        assert not handler.current_requests
+        assert not handler._current_requests
 
     async def test__is_error_msg__daily_limit(self,
                                               msg_daily_reached,

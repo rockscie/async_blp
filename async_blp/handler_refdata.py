@@ -33,8 +33,8 @@ class RequestHandler(AbsHandler):
                  session_options: blpapi.SessionOptions):
 
         super().__init__()
-        self.current_requests: Dict[blpapi.CorrelationId,
-                                    ReferenceDataRequest] = {}
+        self._current_requests: Dict[blpapi.CorrelationId,
+                                     ReferenceDataRequest] = {}
         self.session_started = asyncio.Event()
         self.session_stopped = asyncio.Event()
         self.services: Dict[str, asyncio.Event] = {}
@@ -72,7 +72,7 @@ class RequestHandler(AbsHandler):
 
         for request in requests:
             corr_id = blpapi.CorrelationId(uuid.uuid4())
-            self.current_requests[corr_id] = request
+            self._current_requests[corr_id] = request
 
             # wait until the necessary service is opened
             service = await self._get_service(request.service_name)
@@ -104,10 +104,10 @@ class RequestHandler(AbsHandler):
         their queue) and delete from requests dict
         """
         for corr_id in corr_ids:
-            request = self.current_requests[corr_id]
+            request = self._current_requests[corr_id]
             request.send_queue_message(None)
 
-            del self.current_requests[corr_id]
+            del self._current_requests[corr_id]
 
     @classmethod
     def _is_error_msg(cls, msg: blpapi.Message) -> bool:
@@ -169,7 +169,7 @@ class RequestHandler(AbsHandler):
                 continue
 
             for cor_id in msg.correlationIds():
-                request = self.current_requests[cor_id]
+                request = self._current_requests[cor_id]
                 request.send_queue_message(msg)
 
     def _response_handler(self, event_: blpapi.Event):
@@ -199,5 +199,9 @@ class RequestHandler(AbsHandler):
         Application must wait for the `session_stopped` event to be set before
         deleting this handler, otherwise the main thread can hang forever
         """
-        self._close_requests(self.current_requests.keys())
+        self._close_requests(self._current_requests.keys())
         self.session.stopAsync()
+
+    def get_current_weight(self):
+        return sum(request.weight
+                   for request in self._current_requests.values())

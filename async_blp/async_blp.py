@@ -32,11 +32,11 @@ class AsyncBloomberg:
                  port: int = 8194,
                  log_level: int = logging.WARNING,
                  loop: asyncio.AbstractEventLoop = None,
-                 max_sessions: int = 1,
+                 max_sessions: int = 5,
                  error_behaviour: ErrorBehaviour = ErrorBehaviour.IGNORE,
                  ):
         self._loop = loop or asyncio.get_running_loop()
-        self._max_sessions = max_sessions
+        self._num_sessions = max_sessions
         self._error_behaviour = error_behaviour
 
         self._session_options = blpapi.SessionOptions()
@@ -76,12 +76,7 @@ class AsyncBloomberg:
         """
         Return reference data from Bloomberg
         """
-
-        if self._handlers:
-            handler = self._handlers[0]
-        else:
-            handler = RequestHandler(self._session_options)
-            self._handlers.append(handler)
+        handler = self._choose_handler()
 
         request = ReferenceDataRequest(securities, fields, security_id_type,
                                        overrides)
@@ -90,3 +85,29 @@ class AsyncBloomberg:
         data, errors = await request.process()
 
         return data, errors
+
+    def _choose_handler(self) -> RequestHandler:
+        """
+        Return the most suitable handler to handle new request using
+        the following rules:
+            1) If there are free handlers (with no current requests),
+               return one of them
+            2) If new handler can be created (`max_sessions` is not reached),
+               return new handler
+            3) Otherwise, return the handler with the smallest load
+
+        """
+        free_handlers = [handler
+                         for handler in self._handlers
+                         if not handler.get_current_weight()]
+
+        if free_handlers:
+            return free_handlers[0]
+
+        if len(self._handlers) < self._num_sessions:
+            handler = RequestHandler(self._session_options)
+            self._handlers.append(handler)
+            return handler
+
+        return min([handler for handler in self._handlers],
+                   key=lambda handler: handler.get_current_weight())
