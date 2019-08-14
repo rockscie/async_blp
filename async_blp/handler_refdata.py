@@ -30,31 +30,33 @@ class RequestHandler(AbsHandler):
     """
 
     def __init__(self,
-                 session_options: blpapi.SessionOptions):
+                 session_options: blpapi.SessionOptions,
+                 loop: asyncio.AbstractEventLoop = None):
 
         super().__init__()
         self._current_requests: Dict[blpapi.CorrelationId,
                                      ReferenceDataRequest] = {}
         self.session_started = asyncio.Event()
         self.session_stopped = asyncio.Event()
-        self.services: Dict[str, asyncio.Event] = {}
+        self._services: Dict[str, asyncio.Event] = {}
 
-        self.session = blpapi.Session(options=session_options,
-                                      eventHandler=self)
+        self._session = blpapi.Session(options=session_options,
+                                       eventHandler=self)
 
         # It is important to start session with startAsync before doing anything
         # else
-        self.session.startAsync()
+        self._session.startAsync()
         LOGGER.debug('%s: session started', self.__class__.__name__)
 
         # loop is used for internal coordination
         try:
-            self.loop = asyncio.get_running_loop()
+            self._loop = loop or asyncio.get_running_loop()
         except RuntimeError:
-            raise RuntimeError('Please create handler inside asyncio loop')
+            raise RuntimeError('Please create handler inside asyncio loop'
+                               'or explicitly provide one')
 
         # each event type is processed by its own method
-        self.method_map = {
+        self._method_map = {
             blpapi.Event.SESSION_STATUS:   self._session_handler,
             blpapi.Event.SERVICE_STATUS:   self._service_handler,
             blpapi.Event.RESPONSE:         self._response_handler,
@@ -78,7 +80,7 @@ class RequestHandler(AbsHandler):
             service = await self._get_service(request.service_name)
 
             blp_request = request.create(service)
-            self.session.sendRequest(blp_request, correlationId=corr_id)
+            self._session.sendRequest(blp_request, correlationId=corr_id)
             LOGGER.debug('%s: request send:\n%s',
                          self.__class__.__name__,
                          blp_request)
@@ -88,14 +90,14 @@ class RequestHandler(AbsHandler):
         Try to open service if it wasn't opened yet. Session must be opened
         before calling this method
         """
-        if service_name not in self.services:
-            self.services[service_name] = asyncio.Event()
-            self.session.openServiceAsync(service_name)
+        if service_name not in self._services:
+            self._services[service_name] = asyncio.Event()
+            self._session.openServiceAsync(service_name)
 
         # wait until ServiceOpened event is received
-        await self.services[service_name].wait()
+        await self._services[service_name].wait()
 
-        service = self.session.getService(service_name)
+        service = self._session.getService(service_name)
         return service
 
     def _close_requests(self, corr_ids: Iterable[blpapi.CorrelationId]):
@@ -134,11 +136,11 @@ class RequestHandler(AbsHandler):
 
         if msg.asElement().name() == 'SessionStarted':
             LOGGER.debug('%s: session opened', self.__class__.__name__)
-            self.loop.call_soon_threadsafe(self.session_started.set)
+            self._loop.call_soon_threadsafe(self.session_started.set)
 
         if msg.asElement().name() == 'SessionTerminated':
             LOGGER.debug('%s: session stopped', self.__class__.__name__)
-            self.loop.call_soon_threadsafe(self.session_stopped.set)
+            self._loop.call_soon_threadsafe(self.session_stopped.set)
 
     def _service_handler(self, event_: blpapi.Event):
         """
@@ -149,12 +151,12 @@ class RequestHandler(AbsHandler):
 
         # todo check which service was actually opened
         if msg.asElement().name() == 'ServiceOpened':
-            for service_name, service_event in self.services.items():
+            for service_name, service_event in self._services.items():
 
                 LOGGER.debug('%s: service %s opened',
                              self.__class__.__name__,
                              service_name)
-                self.loop.call_soon_threadsafe(service_event.set)
+                self._loop.call_soon_threadsafe(service_event.set)
 
     def _partial_handler(self, event_: blpapi.Event):
         """
@@ -191,7 +193,7 @@ class RequestHandler(AbsHandler):
         LOGGER.debug('%s: event with type %s received',
                      self.__class__.__name__,
                      event.eventType())
-        self.method_map[event.eventType()](event)
+        self._method_map[event.eventType()](event)
 
     def stop_session(self):
         """
@@ -200,7 +202,7 @@ class RequestHandler(AbsHandler):
         deleting this handler, otherwise the main thread can hang forever
         """
         self._close_requests(self._current_requests.keys())
-        self.session.stopAsync()
+        self._session.stopAsync()
 
     def get_current_weight(self):
         return sum(request.weight

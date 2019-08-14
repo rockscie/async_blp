@@ -56,7 +56,7 @@ class TestHandleRef:
         assert not handler.session_started.is_set()
 
         # in blpapi this happens under the hood
-        handler.session.send_event(open_session_event)
+        handler._session.send_event(open_session_event)
 
         await handler.session_started.wait()
         assert handler.session_started.is_set()
@@ -87,11 +87,11 @@ class TestHandleRef:
         corresponding asyncio event
         """
         handler = RequestHandler(session_options)
-        handler.services['test'] = asyncio.Event()
+        handler._services['test'] = asyncio.Event()
 
-        handler.session.send_event(open_service_event)
-        await handler.services['test'].wait()
-        assert handler.services['test'].is_set()
+        handler._session.send_event(open_service_event)
+        await handler._services['test'].wait()
+        assert handler._services['test'].is_set()
 
     async def test__service_handler__multi_thread(self,
                                                   session_options,
@@ -102,11 +102,11 @@ class TestHandleRef:
         a different thread
         """
         handler = RequestHandler(session_options)
-        handler.services['test'] = asyncio.Event()
+        handler._services['test'] = asyncio.Event()
 
-        handler.session.send_event(open_service_event)
-        await handler.services['test'].wait()
-        assert handler.services['test'].is_set()
+        handler._session.send_event(open_service_event)
+        await handler._services['test'].wait()
+        assert handler._services['test'].is_set()
 
     async def test__get_service(self,
                                 session_options,
@@ -119,9 +119,9 @@ class TestHandleRef:
         task = asyncio.create_task(handler._get_service('test'))
         await asyncio.sleep(0.00001)
 
-        handler.session.send_event(open_service_event)
+        handler._session.send_event(open_service_event)
         assert await task
-        assert handler.services['test'].is_set()
+        assert handler._services['test'].is_set()
 
     async def test__send_requests__correlation_id(self,
                                                   session_options,

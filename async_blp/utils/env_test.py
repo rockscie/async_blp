@@ -351,7 +351,7 @@ class Session:
         while not self.events.empty():
             event = self.events.get(timeout=1)
             LOGGER.debug('Calling handler with %s', event.eventType())
-            handler(event, handler.session)
+            handler(event, handler._session)
 
     def openServiceAsync(self, *args, **kwargs):
         """

@@ -50,6 +50,7 @@ class ReferenceDataRequest:
                  security_id_type: Optional[SecurityIdType] = None,
                  overrides: Optional[Dict] = None,
                  error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
+                 loop: asyncio.AbstractEventLoop = None,
                  ):
 
         self._securities = securities
@@ -59,8 +60,8 @@ class ReferenceDataRequest:
         self._error_behaviour = error_behavior
 
         try:
-            self._loop = asyncio.get_running_loop()
-            self._msg_queue = asyncio.Queue()
+            self._loop = loop or asyncio.get_running_loop()
+            self._msg_queue = asyncio.Queue(loop=self._loop)
         except RuntimeError:
             self._loop = None
             self._msg_queue = None

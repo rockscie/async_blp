@@ -67,3 +67,7 @@ class TestAsyncBloomberg:
         chosen_handler = bloomberg._choose_handler()
 
         assert chosen_handler == handler_1
+
+    def test__init__not_inside_loop(self):
+        with pytest.raises(RuntimeError):
+            AsyncBloomberg()

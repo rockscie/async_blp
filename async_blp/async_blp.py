@@ -35,8 +35,13 @@ class AsyncBloomberg:
                  max_sessions: int = 5,
                  error_behaviour: ErrorBehaviour = ErrorBehaviour.IGNORE,
                  ):
-        self._loop = loop or asyncio.get_running_loop()
-        self._num_sessions = max_sessions
+        try:
+            self._loop = loop or asyncio.get_running_loop()
+        except RuntimeError:
+            raise RuntimeError('Please run AsyncBloomberg inside asyncio '
+                               'loop or explicitly provide one')
+
+        self._max_sessions = max_sessions
         self._error_behaviour = error_behaviour
 
         self._session_options = blpapi.SessionOptions()
@@ -78,8 +83,12 @@ class AsyncBloomberg:
         """
         handler = self._choose_handler()
 
-        request = ReferenceDataRequest(securities, fields, security_id_type,
-                                       overrides)
+        request = ReferenceDataRequest(securities,
+                                       fields,
+                                       security_id_type,
+                                       overrides,
+                                       self._error_behaviour,
+                                       self._loop)
 
         asyncio.create_task(handler.send_requests([request]))
         data, errors = await request.process()
@@ -104,8 +113,8 @@ class AsyncBloomberg:
         if free_handlers:
             return free_handlers[0]
 
-        if len(self._handlers) < self._num_sessions:
-            handler = RequestHandler(self._session_options)
+        if len(self._handlers) < self._max_sessions:
+            handler = RequestHandler(self._session_options, self._loop)
             self._handlers.append(handler)
             return handler
 
