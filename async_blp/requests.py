@@ -103,7 +103,8 @@ class ReferenceDataRequest:
         Return format is pd.DataFrame with columns as fields and indexes
         as security_ids.
         """
-        dataframes = []
+        dataframe = pd.DataFrame(columns=self._fields,
+                                 index=self._securities)
         errors = {}
 
         while True:
@@ -120,20 +121,19 @@ class ReferenceDataRequest:
 
             msg_data = list(msg.getElement(SECURITY_DATA).values())
 
-            msg_frames = [self._parse_security_data(security_data)
-                          for security_data in msg_data]
+            for security_data in msg_data:
+                msg_frame = self._parse_security_data(security_data)
+                index = msg_frame.index
+                columns = msg_frame.columns
 
-            dataframes.extend(msg_frames)
+                dataframe.loc[index, columns] = msg_frame
 
             for security_data in msg_data:
                 security_errors = self._parse_errors(security_data)
                 if security_errors:
                     errors.update(security_errors)
 
-        if dataframes:
-            return pd.concat(dataframes, axis=0), errors
-
-        return pd.DataFrame(), errors
+        return dataframe, errors
 
     def _parse_security_data(self,
                              security_data,

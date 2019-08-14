@@ -14,6 +14,7 @@ from async_blp.utils.blp_name import SECURITY
 from async_blp.utils.blp_name import SECURITY_DATA
 from async_blp.utils.blp_name import SECURITY_ERROR
 from async_blp.utils.env_test import Element
+from async_blp.utils.env_test import Message
 from async_blp.utils.exc import BloombergException
 
 
@@ -44,7 +45,7 @@ def simple_field(simple_field_data):
 def one_value_array_field_data():
     field_name = 'BLOOMBERG_PEERS'
     field_values = ['GM US', 'TSLA US']
-    security_id = 'F Equity'
+    security_id = 'AAPL Equity'
 
     return field_name, field_values, security_id
 
@@ -99,8 +100,8 @@ def multi_value_array_field(multi_value_array_field_data):
 
 
 @pytest.fixture()
-def security_data(one_value_array_field,
-                  one_value_array_field_data):
+def security_data_array(one_value_array_field,
+                        one_value_array_field_data):
     field_name, field_values, security_id = one_value_array_field_data
 
     field_data = Element(FIELD_DATA, None, [one_value_array_field])
@@ -113,6 +114,39 @@ def security_data(one_value_array_field,
                                 })
 
     return security_data
+
+
+@pytest.fixture()
+def security_data_simple(simple_field,
+                         simple_field_data):
+    field_name, field_values, security_id = simple_field_data
+
+    field_data = Element(FIELD_DATA, None, [simple_field])
+    security = Element(SECURITY, security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:   security,
+                                FIELD_DATA: field_data,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def response_msg_one_security(security_data_array):
+    children = Element(SECURITY_DATA, None, [security_data_array])
+
+    return Message('Response', None, {SECURITY_DATA: children})
+
+
+@pytest.fixture()
+def response_msg_several_securities(security_data_array,
+                                    security_data_simple):
+    children = Element(SECURITY_DATA, None, [security_data_array,
+                                             security_data_simple])
+
+    return Message('Response', None, {SECURITY_DATA: children})
 
 
 @pytest.fixture()
@@ -216,7 +250,7 @@ class TestReferenceDataRequest:
         assert parsed_values == field_values
 
     def test___parse_security_data(self,
-                                   security_data,
+                                   security_data_array,
                                    one_value_array_field_data,
                                    ):
         field_name, field_values, security_id = one_value_array_field_data
@@ -228,7 +262,7 @@ class TestReferenceDataRequest:
                                    columns=[field_name],
                                    )
 
-        actual_df = request._parse_security_data(security_data)
+        actual_df = request._parse_security_data(security_data_array)
 
         pd.testing.assert_frame_equal(actual_df, required_df)
 
@@ -361,3 +395,56 @@ class TestReferenceDataRequest:
             }
 
         assert errors == expected_errors
+
+    @pytest.mark.asyncio
+    async def test__process__one_security(self,
+                                          response_msg_one_security,
+                                          one_value_array_field_data):
+        field_name, field_value, security_id = one_value_array_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+
+        request.send_queue_message(response_msg_one_security)
+        request.send_queue_message(None)
+
+        expected_df = pd.DataFrame(columns=[field_name], index=[security_id])
+        expected_df.at[security_id, field_name] = field_value
+
+        actual_df, _ = await request.process()
+
+        pd.testing.assert_frame_equal(actual_df, expected_df)
+
+    @pytest.mark.asyncio
+    async def test__process__several_securities(self,
+                                                response_msg_several_securities,
+                                                one_value_array_field_data,
+                                                simple_field_data):
+        field_name_1, field_value_1, security_id_1 = one_value_array_field_data
+        field_name_2, field_value_2, security_id_2 = simple_field_data
+
+        request = ReferenceDataRequest([security_id_1, security_id_2],
+                                       [field_name_1, field_name_2])
+
+        request.send_queue_message(response_msg_several_securities)
+        request.send_queue_message(None)
+
+        expected_df = pd.DataFrame(columns=[field_name_1, field_name_2],
+                                   index=[security_id_1, security_id_2])
+        expected_df.at[security_id_1, field_name_1] = field_value_1
+        expected_df.at[security_id_2, field_name_2] = field_value_2
+
+        actual_df, _ = await request.process()
+
+        pd.testing.assert_frame_equal(actual_df, expected_df)
+
+    @pytest.mark.asyncio
+    async def test__process__empty(self, one_value_array_field_data):
+        field_name, _, security_id = one_value_array_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+        request.send_queue_message(None)
+
+        expected_df = pd.DataFrame(columns=[field_name], index=[security_id])
+
+        actual_df, _ = await request.process()
+        pd.testing.assert_frame_equal(actual_df, expected_df)

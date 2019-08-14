@@ -3,9 +3,15 @@ high level Api
 """
 import asyncio
 import logging
+from itertools import product
+from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 
+import pandas as pd
+
+from async_blp.utils.misc import split_into_chunks
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
 from .handler_refdata import RequestHandler
@@ -32,8 +38,10 @@ class AsyncBloomberg:
                  port: int = 8194,
                  log_level: int = logging.WARNING,
                  loop: asyncio.AbstractEventLoop = None,
-                 max_sessions: int = 5,
                  error_behaviour: ErrorBehaviour = ErrorBehaviour.IGNORE,
+                 max_sessions: int = 5,
+                 max_securities_per_request: int = 100,
+                 max_fields_per_request: int = 50,
                  ):
         try:
             self._loop = loop or asyncio.get_running_loop()
@@ -41,6 +49,8 @@ class AsyncBloomberg:
             raise RuntimeError('Please run AsyncBloomberg inside asyncio '
                                'loop or explicitly provide one')
 
+        self._max_fields_per_request = max_fields_per_request
+        self._max_securities_per_request = max_securities_per_request
         self._max_sessions = max_sessions
         self._error_behaviour = error_behaviour
 
@@ -77,23 +87,37 @@ class AsyncBloomberg:
             fields: List[str],
             security_id_type: Optional[SecurityIdType] = None,
             overrides=None,
-            ):
+            ) -> Tuple[pd.DataFrame, Dict]:
         """
         Return reference data from Bloomberg
         """
-        handler = self._choose_handler()
 
-        request = ReferenceDataRequest(securities,
-                                       fields,
-                                       security_id_type,
-                                       overrides,
-                                       self._error_behaviour,
-                                       self._loop)
+        chunks = self._divide_reference_data_request(securities, fields)
+        coro = []
 
-        asyncio.create_task(handler.send_requests([request]))
-        data, errors = await request.process()
+        for security_chunk, fields_chunk in chunks:
+            handler = self._choose_handler()
 
-        return data, errors
+            request = ReferenceDataRequest(security_chunk,
+                                           fields,
+                                           security_id_type,
+                                           overrides,
+                                           self._error_behaviour,
+                                           self._loop)
+
+            coro.append(request.process())
+            asyncio.create_task(handler.send_requests([request]))
+
+        requests_result = await asyncio.gather(*coro)
+        result_df = pd.DataFrame(index=securities, columns=fields)
+        errors = {}
+
+        for data, error in requests_result:
+            result_df.loc[data.index, data.columns] = data
+            errors.update(error)
+
+        return result_df, errors
+
 
     def _choose_handler(self) -> RequestHandler:
         """
@@ -120,3 +144,15 @@ class AsyncBloomberg:
 
         return min([handler for handler in self._handlers],
                    key=lambda handler: handler.get_current_weight())
+
+    def _divide_reference_data_request(self,
+                                       securities: List[str],
+                                       fields: List[str]):
+
+        securities_chunks = split_into_chunks(securities,
+                                              self._max_securities_per_request)
+
+        fields_chunks = split_into_chunks(fields,
+                                          self._max_fields_per_request)
+
+        return product(securities_chunks, fields_chunks)
