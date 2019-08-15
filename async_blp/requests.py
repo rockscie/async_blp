@@ -103,8 +103,7 @@ class ReferenceDataRequest:
         Return format is pd.DataFrame with columns as fields and indexes
         as security_ids.
         """
-        dataframe = pd.DataFrame(columns=self._fields,
-                                 index=self._securities)
+        dataframe = self._get_empty_df()
         errors = {}
 
         while True:
@@ -135,6 +134,18 @@ class ReferenceDataRequest:
 
         return dataframe, errors
 
+    def _get_security_id_from_security_data(self,
+                                            security_data: blpapi.Element):
+        """
+        Retrieve security id from security data and remove type prefix if needed
+        """
+        security_id = security_data.getElementAsString(SECURITY)
+
+        if self._security_id_type is not None:
+            security_id = self._security_id_type.remove_type(security_id)
+
+        return security_id
+
     def _parse_security_data(self,
                              security_data,
                              ) -> pd.DataFrame:
@@ -144,7 +155,7 @@ class ReferenceDataRequest:
         Return pd.DataFrame with one row and multiple columns corresponding
         to the received fields.
         """
-        security_id = security_data.getElementAsString(SECURITY)
+        security_id = self._get_security_id_from_security_data(security_data)
 
         field_data: blpapi.Element = security_data.getElement(FIELD_DATA)
 
@@ -175,7 +186,7 @@ class ReferenceDataRequest:
         if self._error_behaviour == ErrorBehaviour.IGNORE:
             return None
 
-        security_id = security_data.getElementAsString(SECURITY)
+        security_id = self._get_security_id_from_security_data(security_data)
         security_errors = {}
 
         if security_data.hasElement(SECURITY_ERROR):
@@ -261,13 +272,10 @@ class ReferenceDataRequest:
         """
         request = service.createRequest(self.request_name)
 
-        if self._security_id_type is None:
-            prefix = ''
-        else:
-            prefix = str(self._security_id_type)
-
         for name in self._securities:
-            name = prefix + name
+            if self._security_id_type is not None:
+                self._security_id_type.add_type(name)
+
             request.getElement("securities").appendValue(name)
 
         for field in self._fields:
@@ -285,3 +293,69 @@ class ReferenceDataRequest:
         between handlers
         """
         return len(self._securities) * len(self._fields)
+
+    def _get_empty_df(self):
+        return pd.DataFrame(columns=self._fields,
+                            index=self._securities)
+
+
+class HistoricalDataRequest(ReferenceDataRequest):
+    request_name = 'HistoricalDataRequest'
+
+    # pylint: disable=too-many-arguments
+    def __init__(self,
+                 securities: List[str],
+                 fields: List[str],
+                 start_date: dt.date,
+                 end_date: dt.date,
+                 security_id_type: Optional[SecurityIdType] = None,
+                 overrides: Optional[Dict] = None,
+                 error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
+                 loop: asyncio.AbstractEventLoop = None,
+                 ):
+        self._start_date = start_date
+        self._end_date = end_date
+
+        overrides = overrides or {}
+        overrides['startDate'] = start_date
+        overrides['endDate'] = end_date
+
+        super().__init__(securities, fields, security_id_type,
+                         overrides, error_behavior, loop)
+
+    @property
+    def weight(self):
+        num_days = (self._end_date - self._start_date).days
+        return super().weight * num_days
+
+    def _parse_security_data(self, security_data) -> pd.DataFrame:
+        security_id = self._get_security_id_from_security_data(security_data)
+
+        field_data: blpapi.Element = security_data.getElement(FIELD_DATA)
+
+        empty_index = pd.MultiIndex.from_tuples([], names=['date', 'security'])
+        security_df = pd.DataFrame(index=empty_index)
+
+        for fields_sequence in field_data.elements():
+            fields_dict = {}
+
+            for field in fields_sequence.values():
+                field_name, field_value = self._parse_field_data(field)
+                fields_dict[field_name] = field_value
+
+            date = pd.Timestamp(fields_dict['date'])
+            for name, value in fields_dict.items():
+                if name == 'date':
+                    continue
+
+                security_df.at[(date, security_id), name] = value
+
+        return security_df
+
+    def _get_empty_df(self):
+        all_dates = pd.date_range(self._start_date, self._end_date)
+        index = pd.MultiIndex.from_product([all_dates, self._securities],
+                                           names=['date', 'security'])
+
+        return pd.DataFrame(index=index,
+                            columns=self._fields)

@@ -2,6 +2,7 @@
 high level Api
 """
 import asyncio
+import datetime as dt
 import logging
 from itertools import product
 from typing import Dict
@@ -11,6 +12,7 @@ from typing import Tuple
 
 import pandas as pd
 
+from async_blp.requests import HistoricalDataRequest
 from async_blp.utils.misc import split_into_chunks
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
@@ -92,8 +94,8 @@ class AsyncBloomberg:
         Return reference data from Bloomberg
         """
 
-        chunks = self._divide_reference_data_request(securities, fields)
-        coro = []
+        chunks = self._split_requests(securities, fields)
+        request_tasks = []
 
         for security_chunk, fields_chunk in chunks:
             handler = self._choose_handler()
@@ -105,16 +107,62 @@ class AsyncBloomberg:
                                            self._error_behaviour,
                                            self._loop)
 
-            coro.append(request.process())
+            request_tasks.append(asyncio.create_task(request.process()))
             asyncio.create_task(handler.send_requests([request]))
 
-        requests_result = await asyncio.gather(*coro)
+        requests_result = await asyncio.gather(*request_tasks)
         result_df = pd.DataFrame(index=securities, columns=fields)
         errors = {}
 
         for data, error in requests_result:
             result_df.loc[data.index, data.columns] = data
             errors.update(error)
+
+        return result_df, errors
+
+    async def get_historical_data(
+            self,
+            securities: List[str],
+            fields: List[str],
+            start_date: dt.date,
+            end_date: dt.date,
+            security_id_type: Optional[SecurityIdType] = None,
+            overrides=None,
+            ) -> Tuple[pd.DataFrame, Dict]:
+        """
+        Return historical data from Bloomberg
+        """
+
+        chunks = self._split_requests(securities, fields)
+        tasks = []
+
+        for security_chunk, fields_chunk in chunks:
+            handler = self._choose_handler()
+
+            request = HistoricalDataRequest(security_chunk,
+                                            fields_chunk,
+                                            start_date,
+                                            end_date,
+                                            security_id_type,
+                                            overrides,
+                                            self._error_behaviour,
+                                            self._loop)
+
+            tasks.append(asyncio.create_task(request.process()))
+            asyncio.create_task(handler.send_requests([request]))
+
+        requests_result = await asyncio.gather(*tasks)
+        result_df = pd.DataFrame(index=securities, columns=fields)
+        errors = {}
+
+        for data, error in requests_result:
+            result_df.loc[data.index, data.columns] = data
+            errors.update(error)
+
+        multi_index = pd.MultiIndex.from_arrays([result_df.index,
+                                                 result_df['Date']])
+
+        result_df.index = multi_index
 
         return result_df, errors
 
@@ -144,9 +192,9 @@ class AsyncBloomberg:
         return min([handler for handler in self._handlers],
                    key=lambda handler: handler.get_current_weight())
 
-    def _divide_reference_data_request(self,
-                                       securities: List[str],
-                                       fields: List[str]):
+    def _split_requests(self,
+                        securities: List[str],
+                        fields: List[str]):
 
         securities_chunks = split_into_chunks(securities,
                                               self._max_securities_per_request)
