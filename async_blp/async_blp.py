@@ -152,17 +152,18 @@ class AsyncBloomberg:
             asyncio.create_task(handler.send_requests([request]))
 
         requests_result = await asyncio.gather(*tasks)
-        result_df = pd.DataFrame(index=securities, columns=fields)
+
+        all_dates = pd.date_range(start_date, end_date)
+        index = pd.MultiIndex.from_product([all_dates, securities],
+                                           names=['date', 'security'])
+
+        result_df = pd.DataFrame(index=index,
+                                 columns=fields)
         errors = {}
 
         for data, error in requests_result:
             result_df.loc[data.index, data.columns] = data
             errors.update(error)
-
-        multi_index = pd.MultiIndex.from_arrays([result_df.index,
-                                                 result_df['Date']])
-
-        result_df.index = multi_index
 
         return result_df, errors
 

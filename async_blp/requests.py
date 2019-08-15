@@ -118,7 +118,12 @@ class ReferenceDataRequest:
 
             LOGGER.debug('%s: message received', self.__class__.__name__)
 
-            msg_data = list(msg.getElement(SECURITY_DATA).values())
+            security_data_element = msg.getElement(SECURITY_DATA)
+
+            if security_data_element.isArray():
+                msg_data = list(security_data_element.values())
+            else:
+                msg_data = [security_data_element]
 
             for security_data in msg_data:
                 msg_frame = self._parse_security_data(security_data)
@@ -317,8 +322,8 @@ class HistoricalDataRequest(ReferenceDataRequest):
         self._end_date = end_date
 
         overrides = overrides or {}
-        overrides['startDate'] = start_date
-        overrides['endDate'] = end_date
+        overrides['startDate'] = start_date.strftime('%Y%m%d')
+        overrides['endDate'] = end_date.strftime('%Y%m%d')
 
         super().__init__(securities, fields, security_id_type,
                          overrides, error_behavior, loop)
@@ -336,10 +341,10 @@ class HistoricalDataRequest(ReferenceDataRequest):
         empty_index = pd.MultiIndex.from_tuples([], names=['date', 'security'])
         security_df = pd.DataFrame(index=empty_index)
 
-        for fields_sequence in field_data.elements():
+        for fields_sequence in field_data.values():
             fields_dict = {}
 
-            for field in fields_sequence.values():
+            for field in fields_sequence.elements():
                 field_name, field_value = self._parse_field_data(field)
                 fields_dict[field_name] = field_value
 
