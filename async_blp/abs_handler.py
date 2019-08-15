@@ -12,7 +12,7 @@ class AbsHandler(metaclass=abc.ABCMeta):
     """
 
     def __init__(self):
-        self.session = None
+        self._session = None
 
     @abc.abstractmethod
     def __call__(self, event, session):

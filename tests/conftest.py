@@ -1,27 +1,38 @@
 """
 All fixtures are samples of blpapi events
 
-For testing purposes, please use `Session.send_event` method, that emulates
+For testing purposes, please use `Session.send_event` method that emulates
 blpapi and opens another thread. You can also call the needed handler method
 directly.
 """
+import logging
 
 import pytest
 
-from async_blp.env_test import Element
-from async_blp.env_test import Event
-from async_blp.env_test import Message
-from async_blp.env_test import SessionOptions
 from async_blp.requests import ReferenceDataRequest
+from async_blp.utils import log
+from async_blp.utils.env_test import Element
+from async_blp.utils.env_test import Event
+from async_blp.utils.env_test import Message
+from async_blp.utils.env_test import SessionOptions
 
 
 # pylint does not like pytest.fixture but we do
 # pylint: disable=redefined-outer-name
 
+
+@pytest.fixture(autouse=True, scope='session')
+def debug_logs():
+    """
+    Show all logs for tests
+    """
+    log.set_logger(logging.DEBUG)
+
+
 @pytest.fixture()
 def session_options() -> SessionOptions():
     """
-    for tests it's not important
+    For tests it's not important
     """
     session_options_ = SessionOptions()
     session_options_.setServerHost("localhost")
@@ -58,7 +69,7 @@ def stop_session_event():
     after user calls `session.stopAsync`
     """
     event_ = Event(type_=Event.SESSION_STATUS,
-                   msgs=[Message(value=0, name='SessionStopped'), ]
+                   msgs=[Message(value=0, name='SessionTerminated'), ]
                    )
     return event_
 
@@ -113,3 +124,13 @@ def error_event(msg_daily_reached):
                      msg_daily_reached,
                      ],
                  )
+
+
+@pytest.fixture()
+def non_error_message():
+    return Message(name="validMessage",
+                   value='',
+                   children={
+                       "validMessage": element_daily_reached
+                       }
+                   )

@@ -3,7 +3,6 @@ Thus module contains wrappers for different types of Bloomberg requests
 """
 import asyncio
 import datetime as dt
-import enum
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -12,56 +11,29 @@ from typing import Union
 
 import pandas as pd
 
-from async_blp.log import LOGGER
-from async_blp.utils.blp_name import ERROR_INFO
-from async_blp.utils.blp_name import FIELD_DATA
-from async_blp.utils.blp_name import FIELD_EXCEPTIONS
-from async_blp.utils.blp_name import FIELD_ID
-from async_blp.utils.blp_name import MESSAGE
-from async_blp.utils.blp_name import SECURITY
-from async_blp.utils.blp_name import SECURITY_DATA
-from async_blp.utils.blp_name import SECURITY_ERROR
-from async_blp.utils.exc import BloombergException
+from .enums import ErrorBehaviour
+from .enums import SecurityIdType
+from .utils import log
+from .utils.blp_name import ERROR_INFO
+from .utils.blp_name import FIELD_DATA
+from .utils.blp_name import FIELD_EXCEPTIONS
+from .utils.blp_name import FIELD_ID
+from .utils.blp_name import MESSAGE
+from .utils.blp_name import SECURITY
+from .utils.blp_name import SECURITY_DATA
+from .utils.blp_name import SECURITY_ERROR
+from .utils.exc import BloombergException
 
+# pylint: disable=ungrouped-imports
 try:
     import blpapi
 except ImportError:
-    from async_blp import env_test as blpapi
+    from async_blp.utils import env_test as blpapi
 
 BloombergValue = Union[str, int, float, dt.date, dt.datetime,
                        Dict[str, Union[str, int, float, dt.date, dt.datetime]]]
 
-
-class SecurityIdType(enum.Enum):
-    """
-    Some of the possible security identifier types. For more information see
-    https://www.bloomberg.com/professional/support/api-library/
-    """
-    TICKER = '/ticker/'
-    ISIN = '/isin/'
-    CUSIP = '/cusip/'
-    SEDOL = '/sedol/'
-
-    BL_SECURITY_IDENTIFIER = '/bsid/'
-    BL_SECURITY_SYMBOL = '/bsym/'
-    BL_UNIQUE_IDENTIFIER = '/buid/'
-    BL_GLOBAL_IDENTIFIER = '/bbgid'
-
-    def __str__(self):
-        return self.value
-
-
-class ErrorBehaviour(enum.Enum):
-    """
-    Enum of supported error behaviours.
-
-    RAISE - raise exception when Bloomberg reports an error
-    RETURN - return all errors in a separate dict
-    IGNORE - ignore all errors
-    """
-    RAISE = 'raise'
-    RETURN = 'return'
-    IGNORE = 'ignore'
+LOGGER = log.get_logger()
 
 
 class ReferenceDataRequest:
@@ -71,12 +43,14 @@ class ReferenceDataRequest:
     service_name = "//blp/refdata"
     request_name = "ReferenceDataRequest"
 
+    # pylint: disable=too-many-arguments
     def __init__(self,
                  securities: List[str],
                  fields: List[str],
                  security_id_type: Optional[SecurityIdType] = None,
                  overrides: Optional[Dict] = None,
                  error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
+                 loop: asyncio.AbstractEventLoop = None,
                  ):
 
         self._securities = securities
@@ -86,8 +60,8 @@ class ReferenceDataRequest:
         self._error_behaviour = error_behavior
 
         try:
-            self._loop = asyncio.get_running_loop()
-            self._msg_queue = asyncio.Queue()
+            self._loop = loop or asyncio.get_running_loop()
+            self._msg_queue = asyncio.Queue(loop=self._loop)
         except RuntimeError:
             self._loop = None
             self._msg_queue = None
@@ -129,7 +103,8 @@ class ReferenceDataRequest:
         Return format is pd.DataFrame with columns as fields and indexes
         as security_ids.
         """
-        dataframes = []
+        dataframe = pd.DataFrame(columns=self._fields,
+                                 index=self._securities)
         errors = {}
 
         while True:
@@ -146,20 +121,19 @@ class ReferenceDataRequest:
 
             msg_data = list(msg.getElement(SECURITY_DATA).values())
 
-            msg_frames = [self._parse_security_data(security_data)
-                          for security_data in msg_data]
+            for security_data in msg_data:
+                msg_frame = self._parse_security_data(security_data)
+                index = msg_frame.index
+                columns = msg_frame.columns
 
-            dataframes.extend(msg_frames)
+                dataframe.loc[index, columns] = msg_frame
 
             for security_data in msg_data:
                 security_errors = self._parse_errors(security_data)
                 if security_errors:
                     errors.update(security_errors)
 
-        if dataframes:
-            return pd.concat(dataframes, axis=0), errors
-
-        return pd.DataFrame(), errors
+        return dataframe, errors
 
     def _parse_security_data(self,
                              security_data,
@@ -303,3 +277,11 @@ class ReferenceDataRequest:
             request.set(key, value)
 
         return request
+
+    @property
+    def weight(self):
+        """
+        Approximate number of returned values; used to balance load
+        between handlers
+        """
+        return len(self._securities) * len(self._fields)
