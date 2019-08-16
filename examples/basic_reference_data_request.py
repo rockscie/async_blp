@@ -20,4 +20,6 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    data, errors = asyncio.run(main())
+    print('Data received', data)
+    print('Errors received:', errors)

@@ -5,7 +5,6 @@ import asyncio
 import datetime as dt
 import logging
 from itertools import product
-from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -90,7 +89,7 @@ class AsyncBloomberg:
             fields: List[str],
             security_id_type: Optional[SecurityIdType] = None,
             overrides=None,
-            ) -> Tuple[pd.DataFrame, Dict]:
+            ) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return reference data from Bloomberg
         """
@@ -113,11 +112,11 @@ class AsyncBloomberg:
 
         requests_result = await asyncio.gather(*request_tasks)
         result_df = pd.DataFrame(index=securities, columns=fields)
-        errors = {}
+        errors = BloombergErrors()
 
         for data, error in requests_result:
             result_df.loc[data.index, data.columns] = data
-            errors.update(error)
+            errors += (error)
 
         return result_df, errors
 
