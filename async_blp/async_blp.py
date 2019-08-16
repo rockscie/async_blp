@@ -12,6 +12,7 @@ from typing import Tuple
 
 import pandas as pd
 
+from async_blp.errors import BloombergErrors
 from async_blp.requests import HistoricalDataRequest
 from async_blp.utils.misc import split_into_chunks
 from .enums import ErrorBehaviour
@@ -128,7 +129,7 @@ class AsyncBloomberg:
             end_date: dt.date,
             security_id_type: Optional[SecurityIdType] = None,
             overrides=None,
-            ) -> Tuple[pd.DataFrame, Dict]:
+            ) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return historical data from Bloomberg
         """
@@ -159,11 +160,11 @@ class AsyncBloomberg:
 
         result_df = pd.DataFrame(index=index,
                                  columns=fields)
-        errors = {}
+        errors = BloombergErrors()
 
         for data, error in requests_result:
             result_df.loc[data.index, data.columns] = data
-            errors.update(error)
+            errors += BloombergErrors()
 
         return result_df, errors
 

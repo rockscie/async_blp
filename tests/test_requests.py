@@ -6,6 +6,8 @@ import pytest
 
 from async_blp.enums import ErrorBehaviour
 from async_blp.enums import SecurityIdType
+from async_blp.errors import BloombergErrors
+from async_blp.errors import ErrorType
 from async_blp.requests import HistoricalDataRequest
 from async_blp.requests import ReferenceDataRequest
 from async_blp.utils.blp_name import ERROR_INFO
@@ -377,10 +379,15 @@ class TestReferenceDataRequest:
     def test___parse_field_exceptions(self,
                                       field_exceptions,
                                       simple_field_data):
-        field_name, _, _ = simple_field_data
+        field_name, _, security_id = simple_field_data
 
-        errors = ReferenceDataRequest._parse_field_exceptions(field_exceptions)
-        expected_errors = {field_name: 'Invalid field'}
+        errors = ReferenceDataRequest._parse_field_exceptions(security_id,
+                                                              field_exceptions,
+                                                              )
+        expected_errors = {
+            (security_id, field_name):
+                ErrorType.INVALID_FIELD_HISTORICAL
+            }
 
         assert errors == expected_errors
 
@@ -417,12 +424,10 @@ class TestReferenceDataRequest:
                                        error_behavior=ErrorBehaviour.RETURN)
 
         errors = request._parse_errors(security_data_with_field_exception)
-        expected_errors = {
-            security_id:
-                {
-                    field_name: 'Invalid field'
-                    }
-            }
+
+        expected_errors = BloombergErrors([], {
+            (security_id, field_name): ErrorType.INVALID_FIELD_HISTORICAL,
+            })
 
         assert errors == expected_errors
 
@@ -436,9 +441,7 @@ class TestReferenceDataRequest:
                                        error_behavior=ErrorBehaviour.RETURN)
 
         errors = request._parse_errors(security_data_with_security_error)
-        expected_errors = {
-            security_id: 'Invalid security',
-            }
+        expected_errors = BloombergErrors([security_id], {})
 
         assert errors == expected_errors
 

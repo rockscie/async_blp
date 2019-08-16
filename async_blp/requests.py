@@ -11,6 +11,8 @@ from typing import Union
 
 import pandas as pd
 
+from async_blp.errors import BloombergErrors
+from async_blp.errors import ErrorType
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
 from .utils import log
@@ -90,10 +92,7 @@ class ReferenceDataRequest:
         self._loop.call_soon_threadsafe(self._msg_queue.put_nowait, msg)
         LOGGER.debug('%s: message sent', self.__class__.__name__)
 
-    async def process(self
-                      ) -> Tuple[pd.DataFrame, Dict[str,
-                                                    Union[str,
-                                                          Dict[str, str]]]]:
+    async def process(self) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Asynchronously process events from `msg_queue` until the event with
         event type RESPONSE is received. This method doesn't check if received
@@ -104,7 +103,7 @@ class ReferenceDataRequest:
         as security_ids.
         """
         dataframe = self._get_empty_df()
-        errors = {}
+        errors = BloombergErrors()
 
         while True:
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
@@ -132,10 +131,9 @@ class ReferenceDataRequest:
 
                 dataframe.loc[index, columns] = msg_frame
 
-            for security_data in msg_data:
                 security_errors = self._parse_errors(security_data)
-                if security_errors:
-                    errors.update(security_errors)
+                if security_errors is not None:
+                    errors += security_errors
 
         return dataframe, errors
 
@@ -178,31 +176,30 @@ class ReferenceDataRequest:
 
     def _parse_errors(self,
                       security_data,
-                      ) -> Optional[Dict[str,
-                                         Union[str,
-                                               Dict[str, str]]]]:
+                      ) -> Optional[BloombergErrors]:
         """
         Check if the given security data has any errors and process them
         according to `self._error_behaviour`
 
-        Return None if exceptions are ignored, or dict containing security
-        and field error messages
+        Return None if exceptions are ignored, otherwise return
+        BloombergErrors instance
         """
         if self._error_behaviour == ErrorBehaviour.IGNORE:
             return None
 
         security_id = self._get_security_id_from_security_data(security_data)
-        security_errors = {}
+        security_errors = BloombergErrors()
 
         if security_data.hasElement(SECURITY_ERROR):
-            security_errors[security_id] = 'Invalid security'
+            security_errors.invalid_securities.append(security_id)
 
         if security_data.hasElement(FIELD_EXCEPTIONS):
             field_exceptions = security_data.getElement(FIELD_EXCEPTIONS)
-            field_errors = self._parse_field_exceptions(field_exceptions)
+            field_errors = self._parse_field_exceptions(security_id,
+                                                        field_exceptions)
 
             if field_errors:
-                security_errors[security_id] = field_errors
+                security_errors.invalid_fields.update(field_errors)
 
         if self._error_behaviour == ErrorBehaviour.RAISE and security_errors:
             raise BloombergException(security_errors)
@@ -210,11 +207,13 @@ class ReferenceDataRequest:
         return security_errors
 
     @staticmethod
-    def _parse_field_exceptions(field_exceptions) -> Dict[str, str]:
+    def _parse_field_exceptions(security_id: str,
+                                field_exceptions: blpapi.Element,
+                                ) -> Dict[Tuple[str, str], str]:
         """
         Parse field exceptions for one security.
 
-        Return dict {field name : error message}
+        Return dict {(security_id, field name) : error message}
         """
         errors = {}
 
@@ -223,7 +222,12 @@ class ReferenceDataRequest:
             error_info = error.getElement(ERROR_INFO)
             message = error_info.getElementAsString(MESSAGE)
 
-            errors[field] = message
+            try:
+                message = ErrorType(message)
+            except ValueError:
+                pass
+
+            errors[(security_id, field)] = message
 
         return errors
 
