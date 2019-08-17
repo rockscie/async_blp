@@ -69,7 +69,9 @@ def stop_session_event():
     after user calls `session.stopAsync`
     """
     event_ = Event(type_=Event.SESSION_STATUS,
-                   msgs=[Message(value=0, name='SessionTerminated'), ]
+                   msgs=[Message(value=0, name='SessionTerminated',
+                                 ),
+                         ]
                    )
     return event_
 
@@ -80,7 +82,13 @@ def open_service_event():
     ServiceOpened event, indicates that service was successfully opened
     """
     event_ = Event(type_=Event.SERVICE_STATUS,
-                   msgs=[Message(value=0, name='ServiceOpened'), ]
+                   msgs=[Message(value=0, name='ServiceOpened',
+                                 children={
+                                     'serviceName':
+                                         Element(
+                                             value="//blp/refdata")
+                                     }
+                                 ), ]
                    )
     return event_
 
@@ -128,6 +136,9 @@ def error_event(msg_daily_reached):
 
 @pytest.fixture()
 def non_error_message():
+    """
+    ???
+    """
     return Message(name="validMessage",
                    value='',
                    children={

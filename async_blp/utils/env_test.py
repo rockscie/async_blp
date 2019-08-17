@@ -25,6 +25,8 @@ LOGGER = log.get_logger()
 
 # pylint: disable=invalid-name
 # pylint: disable=unused-argument
+# we need protected access in tests
+# pylint: disable=protected-access
 
 class Event:
     """
@@ -35,6 +37,17 @@ class Event:
     OTHER = 'other'
     SESSION_STATUS = 'SESSION_STATUS'
     SERVICE_STATUS = 'SERVICE_STATUS'
+    ADMIN = 'ADMIN'
+    SUBSCRIPTION_STATUS = 'SUBSCRIPTION_STATUS'
+    REQUEST_STATUS = 'REQUEST_STATUS'
+    SUBSCRIPTION_DATA = 'SUBSCRIPTION_DATA'
+    TIMEOUT = 'TIMEOUT'
+    AUTHORIZATION_STATUS = 'AUTHORIZATION_STATUS'
+    RESOLUTION_STATUS = 'RESOLUTION_STATUS'
+    TOPIC_STATUS = 'TOPIC_STATUS'
+    TOKEN_STATUS = 'TOKEN_STATUS'
+    REQUEST = 'REQUEST'
+    UNKNOWN = 'UNKNOWN'
 
     def __iter__(self):
         """
@@ -377,17 +390,9 @@ class Session:
 
     def sendRequest(self, request, correlationId: CorrelationId):
         """
-        all request immediately put close messages
-        (@georgy: could you clarify pls?)
+        if all preparations are done you can send it and wait RESPONSE event
         """
-        e = Event(
-            type_=Event.RESPONSE,
-            msgs=[
-                Message(value=0, name='test', correlationId=correlationId),
-                Message(value=0, name='test', correlationId=correlationId),
-                ])
 
-        self.send_event(e)
 
     @staticmethod
     def getService(*args, **kwargs):

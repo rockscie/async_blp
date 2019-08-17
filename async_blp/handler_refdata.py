@@ -4,10 +4,13 @@ File contains handler for ReferenceDataRequest
 
 import asyncio
 import uuid
+from collections import defaultdict
+from typing import Callable
 from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
+from typing import Union
 
 from .abs_handler import AbsHandler
 from .requests import ReferenceDataRequest
@@ -23,45 +26,217 @@ except ImportError:
 LOGGER = get_logger()
 
 
-class RequestHandler(AbsHandler):
+class Handler(AbsHandler):
     """
     Handler gets response events from Bloomberg from other thread,
     then puts it to request queue. Each handler opens its own session
+
+    Base for subscribe and request
+    Work with sessions and services
+    """
+
+    def __call__(self, event: blpapi.Event, session: Optional[blpapi.Session]):
+        """
+        This method is called from Bloomberg session in a separate thread
+        for each incoming event.
+        """
+        LOGGER.debug('%s: event with type %s received',
+                     self.__class__.__name__,
+                     event.eventType())
+        self._method_map[event.eventType()](event)
+
+    def __init__(self,
+                 session_options: blpapi.SessionOptions,
+                 loop: asyncio.AbstractEventLoop = None):
+        """
+        _current_requests -  can contains bloomberg requests and
+        subscriptions in processing
+
+        _services - all open services
+
+        _method_map -  manufactures for processing bloomberg event
+        """
+
+        self._current_requests: Dict[Union[blpapi.CorrelationId, str],
+                                     ReferenceDataRequest] = {}
+        super().__init__(loop)
+        self._session = blpapi.Session(options=session_options,
+                                       eventHandler=self)
+        # It is important to start session with startAsync before doing anything
+        # else
+        self._session.startAsync()
+        LOGGER.debug('%s: session started', self.__class__.__name__)
+        # loop is used for internal coordination
+
+        self._services: Dict[str,
+                             asyncio.Event] = defaultdict(lambda:
+                                                          asyncio.Event(
+                                                              loop=self._loop)
+                                                          )
+
+        # each event type is processed by its own method full description
+        # 9.2 BLPAPI-Core-Developer-Guide
+        self._method_map: Dict[int, Callable] = {
+            blpapi.Event.SESSION_STATUS:       self._session_handler,
+            blpapi.Event.SERVICE_STATUS:       self._service_handler,
+            blpapi.Event.ADMIN:                self._admin_handler,
+            blpapi.Event.AUTHORIZATION_STATUS: self._raise_unknown_msg,
+            blpapi.Event.RESOLUTION_STATUS:    self._raise_unknown_msg,
+            blpapi.Event.TOPIC_STATUS:         self._raise_unknown_msg,
+            blpapi.Event.TOKEN_STATUS:         self._raise_unknown_msg,
+            blpapi.Event.REQUEST:              self._raise_unknown_msg,
+            blpapi.Event.UNKNOWN:              self._raise_unknown_msg
+            }
+
+    def stop_session(self):
+        """
+        Close all requests and begin the process to stop session.
+        Application must wait for the `session_stopped` event to be set
+        before
+        deleting this handler, otherwise the main thread can hang forever
+        """
+        self._close_requests(self._current_requests.keys())
+        self._session.stopAsync()
+
+    def _close_requests(self, corr_ids: Iterable[blpapi.CorrelationId]):
+        """
+        Notify requests that their last event was sent (i.e., send None to
+        their queue) and delete from requests dict
+        """
+        for corr_id in corr_ids:
+            request = self._current_requests[corr_id]
+            request.send_queue_message(None)
+            del self._current_requests[corr_id]
+
+    @property
+    def get_current_weight(self):
+        """
+        score for load balance, all _current_requests are equal
+        """
+
+        return sum(request.weight
+                   for request in self._current_requests.values())
+
+    async def _get_service(self, service_name: str) -> blpapi.Service:
+        """
+        Try to open service if it wasn't opened yet. Session must be opened
+        before calling this method
+        """
+        service_event = self._services[service_name]
+        if not service_event.is_set():
+            self._session.openServiceAsync(service_name)
+
+        # wait until ServiceOpened event is received
+        await self._services[service_name].wait()
+
+        service = self._session.getService(service_name)
+        return service
+
+    @staticmethod
+    def _raise_unknown_msg(msg: Union[blpapi.Message,
+                                      blpapi.Event]):
+        """
+        try find unimplemented methods
+        """
+        if isinstance(msg, blpapi.Event):
+            LOGGER.debug('unknown event type: %s', msg.eventType())
+            msg = list(msg)[0]
+        LOGGER.debug(msg)
+        raise ValueError(f"please in add {msg.asElement().name()}")
+
+    def _session_handler(self, event_: blpapi.Event):
+        """
+        Process blpapi.Event.SESSION_STATUS events.
+        If session is successfully started, set `self.session_started`
+        If session is successfully stopped, set `self.session_stopped`
+        """
+        msg = list(event_)[0]
+
+        if msg.asElement().name() == 'SessionStarted':
+            LOGGER.debug('%s: session opened', self.__class__.__name__)
+            self._loop.call_soon_threadsafe(self.session_started.set)
+
+        elif msg.asElement().name() == 'SessionTerminated':
+            LOGGER.debug('%s: session stopped', self.__class__.__name__)
+            self._loop.call_soon_threadsafe(self.session_stopped.set)
+        elif msg.asElement().name() == 'SessionConnectionUp':
+            LOGGER.debug('%s: session started', self.__class__.__name__)
+        elif msg.asElement().name() == 'SessionConnectionDown':
+            LOGGER.debug('%s: SessionConnectionDown', self.__class__.__name__)
+            self._loop.call_soon_threadsafe(self.session_stopped.set)
+        else:
+            # SessionStartupFailure
+            self._raise_unknown_msg(msg)
+
+    def _service_handler(self, event_: blpapi.Event):
+        """
+        Process blpapi.Event.SERVICE_STATUS events. If service is successfully
+        started, set corresponding event in `self.services`
+        """
+        msg = list(event_)[0]
+
+        if msg.asElement().name() == 'ServiceOpened':
+            service_name = msg.getElement('serviceName').getValue()
+            service_event = self._services[service_name]
+
+            LOGGER.debug('%s: service %s opened',
+                         self.__class__.__name__,
+                         service_name)
+            self._loop.call_soon_threadsafe(service_event.set)
+        else:
+            # SessionClusterInfo
+            # SessionClusterInfo
+            # ServiceOpenFailure
+            self._raise_unknown_msg(msg)
+
+    def _admin_handler(self, event_):
+        """
+        Process blpapi.Event.ADMIN events.
+        Process all msg with warning about Data Loss
+        """
+        for msg in event_:
+            if msg.asElement().name() == 'SlowConsumerWarning':
+                LOGGER.debug('%s: sIndicates client is slow. '
+                             'NO category/subcategory',
+                             self.__class__.__name__)
+                LOGGER.debug(msg)
+            elif msg.asElement().name() == 'SlowConsumerWarningCleared':
+                LOGGER.debug('%s:Indicates client is slow. '
+                             'NO category/subcategory',
+                             self.__class__.__name__)
+            elif msg.asElement().name() == 'DataLoss':
+                LOGGER.debug('%s: we have loose data',
+                             self.__class__.__name__)
+            elif msg.asElement().name() in (
+                    'RequestTemplateAvailable',
+                    'RequestTemplatePending',
+                    'RequestTemplateTerminated',):
+                LOGGER.debug('%s: we have loose data', self.__class__.__name__)
+            else:
+                self._raise_unknown_msg(msg)
+
+
+class RequestHandler(Handler):
+    """
+    Handler gets response events from Bloomberg from other thread,
+    then puts it to request queue. Each handler opens its own session
+
+    Work with historical and current Requests
     """
 
     def __init__(self,
                  session_options: blpapi.SessionOptions,
                  loop: asyncio.AbstractEventLoop = None):
 
-        super().__init__()
-        self._current_requests: Dict[blpapi.CorrelationId,
-                                     ReferenceDataRequest] = {}
-        self.session_started = asyncio.Event()
-        self.session_stopped = asyncio.Event()
-        self._services: Dict[str, asyncio.Event] = {}
+        super().__init__(session_options, loop)
 
-        self._session = blpapi.Session(options=session_options,
-                                       eventHandler=self)
+        # each event type is processed by its own method full description
+        # 9.2 BLPAPI-Core-Developer-Guide
 
-        # It is important to start session with startAsync before doing anything
-        # else
-        self._session.startAsync()
-        LOGGER.debug('%s: session started', self.__class__.__name__)
-
-        # loop is used for internal coordination
-        try:
-            self._loop = loop or asyncio.get_running_loop()
-        except RuntimeError:
-            raise RuntimeError('Please create handler inside asyncio loop'
-                               'or explicitly provide one')
-
-        # each event type is processed by its own method
-        self._method_map = {
-            blpapi.Event.SESSION_STATUS:   self._session_handler,
-            blpapi.Event.SERVICE_STATUS:   self._service_handler,
-            blpapi.Event.RESPONSE:         self._response_handler,
-            blpapi.Event.PARTIAL_RESPONSE: self._partial_handler,
-            }
+        self._method_map[blpapi.Event.RESPONSE] = self._response_handler
+        self._method_map[blpapi.Event.PARTIAL_RESPONSE] = self._partial_handler
+        self._method_map[blpapi.Event.REQUEST_STATUS] = self._raise_unknown_msg
+        self._method_map[blpapi.Event.TIMEOUT] = self._raise_unknown_msg
 
     async def send_requests(self, requests: List[ReferenceDataRequest]):
         """
@@ -85,32 +260,6 @@ class RequestHandler(AbsHandler):
                          self.__class__.__name__,
                          blp_request)
 
-    async def _get_service(self, service_name: str) -> blpapi.Service:
-        """
-        Try to open service if it wasn't opened yet. Session must be opened
-        before calling this method
-        """
-        if service_name not in self._services:
-            self._services[service_name] = asyncio.Event()
-            self._session.openServiceAsync(service_name)
-
-        # wait until ServiceOpened event is received
-        await self._services[service_name].wait()
-
-        service = self._session.getService(service_name)
-        return service
-
-    def _close_requests(self, corr_ids: Iterable[blpapi.CorrelationId]):
-        """
-        Notify requests that their last event was sent (i.e., send None to
-        their queue) and delete from requests dict
-        """
-        for corr_id in corr_ids:
-            request = self._current_requests[corr_id]
-            request.send_queue_message(None)
-
-            del self._current_requests[corr_id]
-
     @classmethod
     def _is_error_msg(cls, msg: blpapi.Message) -> bool:
         """
@@ -118,45 +267,12 @@ class RequestHandler(AbsHandler):
         such as lost connection, request limit reached etc.
         """
         if msg.hasElement(RESPONSE_ERROR):
-
             LOGGER.debug('%s: error message received:\n%s',
                          cls.__name__,
                          msg)
             return True
 
         return False
-
-    def _session_handler(self, event_: blpapi.Event):
-        """
-        Process blpapi.Event.SESSION_STATUS events.
-        If session is successfully started, set `self.session_started`
-        If session is successfully stopped, set `self.session_stopped`
-        """
-        msg = list(event_)[0]
-
-        if msg.asElement().name() == 'SessionStarted':
-            LOGGER.debug('%s: session opened', self.__class__.__name__)
-            self._loop.call_soon_threadsafe(self.session_started.set)
-
-        if msg.asElement().name() == 'SessionTerminated':
-            LOGGER.debug('%s: session stopped', self.__class__.__name__)
-            self._loop.call_soon_threadsafe(self.session_stopped.set)
-
-    def _service_handler(self, event_: blpapi.Event):
-        """
-        Process blpapi.Event.SERVICE_STATUS events. If service is successfully
-        started, set corresponding event in `self.services`
-        """
-        msg = list(event_)[0]
-
-        # todo check which service was actually opened
-        if msg.asElement().name() == 'ServiceOpened':
-            for service_name, service_event in self._services.items():
-
-                LOGGER.debug('%s: service %s opened',
-                             self.__class__.__name__,
-                             service_name)
-                self._loop.call_soon_threadsafe(service_event.set)
 
     def _partial_handler(self, event_: blpapi.Event):
         """
@@ -185,25 +301,43 @@ class RequestHandler(AbsHandler):
         for msg in event_:
             self._close_requests(msg.correlationIds())
 
-    def __call__(self, event: blpapi.Event, session: Optional[blpapi.Session]):
-        """
-        This method is called from Bloomberg session in a separate thread
-        for each incoming event.
-        """
-        LOGGER.debug('%s: event with type %s received',
-                     self.__class__.__name__,
-                     event.eventType())
-        self._method_map[event.eventType()](event)
 
-    def stop_session(self):
-        """
-        Close all requests and begin the process to stop session.
-        Application must wait for the `session_stopped` event to be set before
-        deleting this handler, otherwise the main thread can hang forever
-        """
-        self._close_requests(self._current_requests.keys())
-        self._session.stopAsync()
+class SubHandler(Handler):
+    """
+    Handler gets response events from Bloomberg from other thread,
+    then puts it to request queue. Each handler opens its own session
 
-    def get_current_weight(self):
-        return sum(request.weight
-                   for request in self._current_requests.values())
+    Work with subscribes
+    """
+
+    def __init__(self,
+                 session_options: blpapi.SessionOptions,
+                 loop: asyncio.AbstractEventLoop = None):
+        super().__init__(session_options, loop)
+
+        self._method_map[
+            blpapi.Event.SUBSCRIPTION_STATUS] = self._raise_unknown_msg
+        self._method_map[
+            blpapi.Event.SUBSCRIPTION_DATA] = self._raise_unknown_msg
+
+    async def subscribe(self, subscribes: List[ReferenceDataRequest]):
+        """
+        Send requests to Bloomberg
+
+        Wait until session is started and required service is opened,
+        then send requests
+        """
+        await self.session_started.wait()
+
+        for subscribe in subscribes:
+            corr_id = str(uuid.uuid4())
+            self._current_requests[corr_id] = subscribe
+
+            # wait until the necessary service is opened
+            service = await self._get_service(subscribe.service_name)
+
+            blp_subscribe = subscribe.create(service)
+            self._session.subscribe(blp_subscribe, requestLabel=corr_id)
+            LOGGER.debug('%s: subscribe send:\n%s',
+                         self.__class__.__name__,
+                         blp_subscribe)

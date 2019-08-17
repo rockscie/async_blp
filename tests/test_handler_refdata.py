@@ -27,8 +27,7 @@ class TestHandleRef:
     async def test___session_handler__start_session__single_thread(
             self,
             session_options,
-            open_session_event,
-            ):
+            open_session_event,):
         """
         Check that receiving `SessionStarted` blpapi event correctly sets the
         `HandlerRef.session_started` asyncio event
@@ -45,8 +44,7 @@ class TestHandleRef:
     async def test__session_handler__start_session__multi_thread(
             self,
             session_options,
-            open_session_event,
-            ):
+            open_session_event,):
         """
         Check that receiving `SessionStarted` blpapi event correctly sets the
         `HandlerRef.session_started` asyncio event when handler is called from
@@ -64,8 +62,7 @@ class TestHandleRef:
     async def test___session_handler__stop_session(
             self,
             session_options,
-            stop_session_event,
-            ):
+            stop_session_event,):
         """
         Check that receiving `SessionStopped` blpapi event correctly sets the
         `HandlerRef.session_stopped` asyncio event
@@ -87,11 +84,12 @@ class TestHandleRef:
         corresponding asyncio event
         """
         handler = RequestHandler(session_options)
-        handler._services['test'] = asyncio.Event()
+        handler._services['//blp/refdata'] = asyncio.Event()
 
         handler._session.send_event(open_service_event)
-        await handler._services['test'].wait()
-        assert handler._services['test'].is_set()
+
+        await handler._services['//blp/refdata'].wait()
+        assert handler._services['//blp/refdata'].is_set()
 
     async def test__service_handler__multi_thread(self,
                                                   session_options,
@@ -102,11 +100,11 @@ class TestHandleRef:
         a different thread
         """
         handler = RequestHandler(session_options)
-        handler._services['test'] = asyncio.Event()
+        handler._services['//blp/refdata'] = asyncio.Event()
 
         handler._session.send_event(open_service_event)
-        await handler._services['test'].wait()
-        assert handler._services['test'].is_set()
+        await handler._services['//blp/refdata'].wait()
+        assert handler._services['//blp/refdata'].is_set()
 
     async def test__get_service(self,
                                 session_options,
@@ -116,12 +114,12 @@ class TestHandleRef:
         Check that `get_service()` waits for the correct event
         """
         handler = RequestHandler(session_options)
-        task = asyncio.create_task(handler._get_service('test'))
+        task = asyncio.create_task(handler._get_service('//blp/refdata'))
         await asyncio.sleep(0.00001)
 
         handler._session.send_event(open_service_event)
         assert await task
-        assert handler._services['test'].is_set()
+        assert handler._services['//blp/refdata'].is_set()
 
     async def test__send_requests__correlation_id(self,
                                                   session_options,
