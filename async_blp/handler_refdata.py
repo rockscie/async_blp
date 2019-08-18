@@ -12,6 +12,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
+from async_blp.requests import ReferenceDataSubscribe
 from .abs_handler import AbsHandler
 from .requests import ReferenceDataRequest
 from .utils.blp_name import RESPONSE_ERROR
@@ -57,7 +58,7 @@ class Handler(AbsHandler):
         _method_map -  manufactures for processing bloomberg event
         """
 
-        self._current_requests: Dict[Union[blpapi.CorrelationId, str],
+        self._current_requests: Dict[blpapi.CorrelationId,
                                      ReferenceDataRequest] = {}
         super().__init__(loop)
         self._session = blpapi.Session(options=session_options,
@@ -315,12 +316,34 @@ class SubHandler(Handler):
                  loop: asyncio.AbstractEventLoop = None):
         super().__init__(session_options, loop)
 
+        self._current_requests: Dict[str,
+                                     ReferenceDataSubscribe] = {}
+
         self._method_map[
             blpapi.Event.SUBSCRIPTION_STATUS] = self._raise_unknown_msg
         self._method_map[
-            blpapi.Event.SUBSCRIPTION_DATA] = self._raise_unknown_msg
+            blpapi.Event.SUBSCRIPTION_DATA] = self._subscriber_data_handler
 
-    async def subscribe(self, subscribes: List[ReferenceDataRequest]):
+    def _subscriber_data_handler(self, event_: blpapi.Event):
+        """
+        new data in subscriber
+        """
+        for msg in event_:
+            for _ in msg.correlationIds():
+                for request in self._current_requests.values():
+                    request.send_queue_message(msg)
+
+    def _subscriber_status_handler(self, event_: blpapi.Event):
+        """
+        if all ok do nothing
+        """
+        for msg in event_:
+            if msg.asElement().name() not in ("SubscriptionStarted",
+                                              "SubscriptionStreamsActivated",
+                                              ):
+                self._raise_unknown_msg(msg)
+
+    async def subscribe(self, subscribes: List[ReferenceDataSubscribe]):
         """
         Send requests to Bloomberg
 
@@ -332,11 +355,7 @@ class SubHandler(Handler):
         for subscribe in subscribes:
             corr_id = str(uuid.uuid4())
             self._current_requests[corr_id] = subscribe
-
-            # wait until the necessary service is opened
-            service = await self._get_service(subscribe.service_name)
-
-            blp_subscribe = subscribe.create(service)
+            blp_subscribe = subscribe.create()
             self._session.subscribe(blp_subscribe, requestLabel=corr_id)
             LOGGER.debug('%s: subscribe send:\n%s',
                          self.__class__.__name__,

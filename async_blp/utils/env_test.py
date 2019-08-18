@@ -28,6 +28,33 @@ LOGGER = log.get_logger()
 # we need protected access in tests
 # pylint: disable=protected-access
 
+class SubscriptionList:
+    """
+    eache Subscription for one asset
+    """
+
+    def add(self,
+            topic,
+            fields=None,
+            options=None,
+            correlationId=None):
+        """
+        topic (str): The topic to subscribe to
+        fields (str or [str]): List of fields to subscribe to
+        options (str or [str] or dict): List of options
+        correlationId (CorrelationId): Correlation id to associate with the
+        subscription
+        """
+
+    def append(self, other):
+        """Append a copy of the specified :class:`SubscriptionList` to this
+        list.
+
+        Args:
+            other (SubscriptionList): List to append to this one
+        """
+
+
 class Event:
     """
     contains Message and type
@@ -393,7 +420,6 @@ class Session:
         if all preparations are done you can send it and wait RESPONSE event
         """
 
-
     @staticmethod
     def getService(*args, **kwargs):
         """
@@ -401,6 +427,15 @@ class Session:
         if service was not opened
         """
         return Service()
+
+    def subscribe(self, subscriptionList, identity=None, requestLabel=""):
+        """
+        Args:
+        subscriptionList (SubscriptionList): List of subscriptions to begin
+        identity (Identity): Identity used for authorization
+        requestLabel (str): String which will be recorded along with any
+        diagnostics for this operation
+        """
 
 
 # real blpapi uses string optimization; for testing purposes just str will do
