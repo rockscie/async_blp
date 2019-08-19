@@ -25,6 +25,35 @@ LOGGER = log.get_logger()
 
 # pylint: disable=invalid-name
 # pylint: disable=unused-argument
+# we need protected access in tests
+# pylint: disable=protected-access
+
+class SubscriptionList:
+    """
+    eache Subscription for one asset
+    """
+
+    def add(self,
+            topic,
+            fields=None,
+            options=None,
+            correlationId=None):
+        """
+        topic (str): The topic to subscribe to
+        fields (str or [str]): List of fields to subscribe to
+        options (str or [str] or dict): List of options
+        correlationId (CorrelationId): Correlation id to associate with the
+        subscription
+        """
+
+    def append(self, other):
+        """Append a copy of the specified :class:`SubscriptionList` to this
+        list.
+
+        Args:
+            other (SubscriptionList): List to append to this one
+        """
+
 
 class Event:
     """
@@ -35,6 +64,17 @@ class Event:
     OTHER = 'other'
     SESSION_STATUS = 'SESSION_STATUS'
     SERVICE_STATUS = 'SERVICE_STATUS'
+    ADMIN = 'ADMIN'
+    SUBSCRIPTION_STATUS = 'SUBSCRIPTION_STATUS'
+    REQUEST_STATUS = 'REQUEST_STATUS'
+    SUBSCRIPTION_DATA = 'SUBSCRIPTION_DATA'
+    TIMEOUT = 'TIMEOUT'
+    AUTHORIZATION_STATUS = 'AUTHORIZATION_STATUS'
+    RESOLUTION_STATUS = 'RESOLUTION_STATUS'
+    TOPIC_STATUS = 'TOPIC_STATUS'
+    TOKEN_STATUS = 'TOKEN_STATUS'
+    REQUEST = 'REQUEST'
+    UNKNOWN = 'UNKNOWN'
 
     def __iter__(self):
         """
@@ -377,17 +417,8 @@ class Session:
 
     def sendRequest(self, request, correlationId: CorrelationId):
         """
-        all request immediately put close messages
-        (@georgy: could you clarify pls?)
+        if all preparations are done you can send it and wait RESPONSE event
         """
-        e = Event(
-            type_=Event.RESPONSE,
-            msgs=[
-                Message(value=0, name='test', correlationId=correlationId),
-                Message(value=0, name='test', correlationId=correlationId),
-                ])
-
-        self.send_event(e)
 
     @staticmethod
     def getService(*args, **kwargs):
@@ -396,6 +427,15 @@ class Session:
         if service was not opened
         """
         return Service()
+
+    def subscribe(self, subscriptionList, identity=None, requestLabel=""):
+        """
+        Args:
+        subscriptionList (SubscriptionList): List of subscriptions to begin
+        identity (Identity): Identity used for authorization
+        requestLabel (str): String which will be recorded along with any
+        diagnostics for this operation
+        """
 
 
 # real blpapi uses string optimization; for testing purposes just str will do

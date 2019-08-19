@@ -88,8 +88,7 @@ class AsyncBloomberg:
             securities: List[str],
             fields: List[str],
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None,
-            ) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None,) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return reference data from Bloomberg
         """
@@ -127,8 +126,7 @@ class AsyncBloomberg:
             start_date: dt.date,
             end_date: dt.date,
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None,
-            ) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None,) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return historical data from Bloomberg
         """
@@ -180,7 +178,7 @@ class AsyncBloomberg:
         """
         free_handlers = [handler
                          for handler in self._handlers
-                         if not handler.get_current_weight()]
+                         if not handler.get_current_weight]
 
         if free_handlers:
             return free_handlers[0]
@@ -191,7 +189,7 @@ class AsyncBloomberg:
             return handler
 
         return min([handler for handler in self._handlers],
-                   key=lambda handler: handler.get_current_weight())
+                   key=lambda handler: handler.get_current_weight)
 
     def _split_requests(self,
                         securities: List[str],

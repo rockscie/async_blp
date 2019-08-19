@@ -11,6 +11,7 @@ import pytest
 
 from async_blp.requests import ReferenceDataRequest
 from async_blp.utils import log
+from async_blp.utils.env_test import CorrelationId
 from async_blp.utils.env_test import Element
 from async_blp.utils.env_test import Event
 from async_blp.utils.env_test import Message
@@ -69,7 +70,9 @@ def stop_session_event():
     after user calls `session.stopAsync`
     """
     event_ = Event(type_=Event.SESSION_STATUS,
-                   msgs=[Message(value=0, name='SessionTerminated'), ]
+                   msgs=[Message(value=0, name='SessionTerminated',
+                                 ),
+                         ]
                    )
     return event_
 
@@ -80,7 +83,13 @@ def open_service_event():
     ServiceOpened event, indicates that service was successfully opened
     """
     event_ = Event(type_=Event.SERVICE_STATUS,
-                   msgs=[Message(value=0, name='ServiceOpened'), ]
+                   msgs=[Message(value=0, name='ServiceOpened',
+                                 children={
+                                     'serviceName':
+                                         Element(
+                                             value="//blp/refdata")
+                                     }
+                                 ), ]
                    )
     return event_
 
@@ -128,9 +137,74 @@ def error_event(msg_daily_reached):
 
 @pytest.fixture()
 def non_error_message():
+    """
+    ???
+    """
     return Message(name="validMessage",
                    value='',
                    children={
                        "validMessage": element_daily_reached
                        }
                    )
+
+
+@pytest.fixture()
+def market_data():
+    """
+    just random data in subscriber
+    """
+    mk_data = 'INITPAINT'
+    bid = 133.75
+    ask_size = 1
+    ind_bid_flag = False
+    return mk_data, bid, ask_size, ind_bid_flag
+
+
+@pytest.fixture()
+def start_subscribe_event():
+    """
+    SubscriptionStarted = {
+        exceptions[] = {
+        }
+        streamIds[] = {
+            "1"
+        }
+        receivedFrom = {
+            address = "localhost:8194"
+        }
+        reason = "Subscriber made a subscription"
+    }
+    """
+    event_ = Event(type_=Event.SUBSCRIPTION_STATUS,
+                   msgs=[Message(value=0, name='SubscriptionStarted'), ]
+                   )
+    return event_
+
+
+@pytest.fixture()
+def market_data_event(market_data):
+    """
+    simple example date from subscriber
+    """
+    mk_data, bid, ask_size, ind_bid_flag = market_data
+    msgs = [Message(name="MarketDataEvents",
+                    value=[],
+                    children={
+                        'MarketDataEvents':
+                            Element(
+                                'MarketDataEvents',
+                                value=[],
+                                children={
+                                    'MKTDATA':      Element('MKTDATA', mk_data),
+                                    'BID':          Element("BID", bid),
+                                    'ASK_SIZE':     Element('ASK_SIZE',
+                                                            ask_size),
+                                    'IND_BID_FLAG': Element('IND_BID_FLAG',
+                                                            ind_bid_flag)
+                                    },
+                                )
+                        },
+                    correlationId=CorrelationId("test"),
+                    )]
+
+    return Event(Event.SUBSCRIPTION_DATA, msgs)

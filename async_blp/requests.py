@@ -3,6 +3,7 @@ Thus module contains wrappers for different types of Bloomberg requests
 """
 import asyncio
 import datetime as dt
+import uuid
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -13,6 +14,7 @@ import pandas as pd
 
 from async_blp.errors import BloombergErrors
 from async_blp.errors import ErrorType
+from async_blp.utils.blp_name import MARKET_DATA_EVENTS
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
 from .utils import log
@@ -66,7 +68,7 @@ class ReferenceDataRequest:
             self._msg_queue = asyncio.Queue(loop=self._loop)
         except RuntimeError:
             self._loop = None
-            self._msg_queue = None
+            self._msg_queue: Optional[asyncio.Queue] = None
 
     def set_running_loop_as_default(self):
         """
@@ -102,10 +104,11 @@ class ReferenceDataRequest:
         Return format is pd.DataFrame with columns as fields and indexes
         as security_ids.
         """
-        dataframe = self._get_empty_df()
+        data_frame = self._get_empty_df()
         errors = BloombergErrors()
 
         while True:
+
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
             msg = await self._msg_queue.get()
 
@@ -129,13 +132,13 @@ class ReferenceDataRequest:
                 index = msg_frame.index
                 columns = msg_frame.columns
 
-                dataframe.loc[index, columns] = msg_frame
+                data_frame.loc[index, columns] = msg_frame
 
                 security_errors = self._parse_errors(security_data)
                 if security_errors is not None:
                     errors += security_errors
 
-        return dataframe, errors
+        return data_frame, errors
 
     def _get_security_id_from_security_data(self,
                                             security_data: blpapi.Element):
@@ -368,3 +371,60 @@ class HistoricalDataRequest(ReferenceDataRequest):
 
         return pd.DataFrame(index=index,
                             columns=self._fields)
+
+
+class ReferenceDataSubscribe(ReferenceDataRequest):
+    service_name = '//blp/mktdata'
+
+    def __init__(self,
+                 securities: List[str],
+                 fields: List[str],
+                 security_id_type: Optional[SecurityIdType] = None,
+                 overrides: Optional[Dict] = None,
+                 error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
+                 loop: asyncio.AbstractEventLoop = None,
+                 ):
+        super().__init__(securities,
+                         fields,
+                         security_id_type,
+                         overrides,
+                         error_behavior,
+                         loop)
+        self._all_fields = self._fields[:]
+        self._ids_sec = {uuid.uuid4(): sec for sec in self._securities}
+
+    def create(
+            self,
+            service: blpapi.Service = None, ) -> blpapi.SubscriptionList:
+        s_list = blpapi.SubscriptionList()
+        for cor_id, security in self._ids_sec.items():
+            s_list.add(security, self._fields, cor_id)
+
+        return s_list
+
+    def _get_empty_df(self):
+        return pd.DataFrame(columns=self._all_fields,
+                            index=self._securities)
+
+    async def process(self) -> Tuple[pd.DataFrame, BloombergErrors]:
+        """
+        Asynchronously process events from `msg_queue` until the event will
+        ended
+
+        Return format is pd.DataFrame with columns as fields and indexes
+        as security_ids.
+        """
+        errors = BloombergErrors()
+        data = {}
+        while not self._msg_queue.empty():
+            LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
+            msg = self._msg_queue.get_nowait()
+            for cor_id in msg.correlationIds():
+                if cor_id not in self._ids_sec:
+                    continue
+                security_data_element = msg.getElement(MARKET_DATA_EVENTS)
+                for field in security_data_element.elements():
+                    field_name, field_value = self._parse_field_data(field)
+                    data[field_name] = {self._ids_sec[cor_id]: field_value}
+
+        return pd.DataFrame(data), errors
