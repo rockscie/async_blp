@@ -14,6 +14,7 @@ import pandas as pd
 from async_blp.errors import BloombergErrors
 from async_blp.handler_refdata import SubHandler
 from async_blp.requests import HistoricalDataRequest
+from async_blp.requests import SearchField
 from async_blp.requests import SubscribeData
 from async_blp.utils.misc import split_into_chunks
 from .enums import ErrorBehaviour
@@ -122,6 +123,28 @@ class AsyncBloomberg:
             errors += (error)
 
         return result_df, errors
+
+    async def search_fields(
+            self,
+            fields: List[str],
+            overrides=None, ) -> Tuple[pd.DataFrame, BloombergErrors]:
+        """
+        Return reference data from Bloomberg
+        """
+
+        request = SearchField(fields,
+                              overrides,
+                              self._error_behaviour,
+                              self._loop)
+        handler = self._choose_handler()
+
+        asyncio.create_task(handler.send_requests([request]))
+
+        requests_result = await request.process()
+
+        data, error = requests_result
+
+        return data, error
 
     async def get_historical_data(
             self,
