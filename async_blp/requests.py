@@ -435,3 +435,33 @@ class SubscribeData(ReferenceDataRequest):
                         LOGGER.error(Ex)
 
         return pd.DataFrame(data)
+
+
+class SearchField(ReferenceDataRequest):
+    service_name = "//blp/apiflds"
+    request_name = "CategorizedFieldSearchRequest"
+
+    def __init__(self,
+                 fields: List[str],
+                 overrides: Optional[Dict] = None,
+                 error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
+                 loop: asyncio.AbstractEventLoop = None,
+                 ):
+        super().__init__([],
+                         fields,
+                         overrides=overrides,
+                         error_behavior = error_behavior,
+                         loop=loop)
+
+    def create(self, service: blpapi.Service) -> blpapi.Request:
+        """
+        Create Bloomberg request. Given `service` must be opened beforehand.
+        """
+        request = service.createRequest(self.request_name)
+        for field in self._fields:
+            request.append("searchSpec", field)
+
+        for key, value in self._overrides.items():
+            request.set(key, value)
+
+        return request
