@@ -286,7 +286,7 @@ class ReferenceDataRequest:
 
         for name in self._securities:
             if self._security_id_type is not None:
-                self._security_id_type.add_type(name)
+                name = self._security_id_type.add_type(name)
 
             request.getElement("securities").appendValue(name)
 
