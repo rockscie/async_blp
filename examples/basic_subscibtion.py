@@ -18,6 +18,7 @@ async def main(sec=4):
     data = []
     while (dt.datetime.now() - start) < dt.timedelta(seconds=sec):
         data.append(await bloomberg.read_subscriber())
+        await asyncio.sleep(1)
 
     await bloomberg.stop()
 

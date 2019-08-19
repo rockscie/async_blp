@@ -410,7 +410,7 @@ class SubscribeData(ReferenceDataRequest):
         return pd.DataFrame(columns=self._all_fields,
                             index=self._securities)
 
-    async def process(self) -> Tuple[pd.DataFrame, BloombergErrors]:
+    async def process(self) -> pd.DataFrame:
         """
         Asynchronously process events from `msg_queue` until the event will
         ended
@@ -428,7 +428,10 @@ class SubscribeData(ReferenceDataRequest):
                     continue
                 security_data_element = msg.asElement()
                 for field in security_data_element.elements():
-                    field_name, field_value = self._parse_field_data(field)
-                    data[field_name] = {self._ids_sec[cor_id]: field_value}
+                    try:
+                        field_name, field_value = self._parse_field_data(field)
+                        data[field_name] = {self._ids_sec[cor_id]: field_value}
+                    except blpapi.exception.IndexOutOfRangeException as Ex:
+                        LOGGER.error(Ex)
 
-        return pd.DataFrame(data), errors
+        return pd.DataFrame(data)
