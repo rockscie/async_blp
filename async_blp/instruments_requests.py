@@ -26,7 +26,7 @@ class SecurityLookupRequest(ReferenceDataRequest):
     def __init__(self,
                  query: str,
                  options: Dict[str, str],
-                 max_results: int = None,
+                 max_results: int = 10,
                  error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
                  loop: asyncio.AbstractEventLoop = None):
 
@@ -65,7 +65,7 @@ class SecurityLookupRequest(ReferenceDataRequest):
 
             results = msg.getElement('results')
 
-            for element in results.getElements():
+            for element in results.values():
                 security = element.getElementAsString('security')
                 description = element.getElementAsString('description')
 
@@ -112,7 +112,7 @@ class CurveLookupRequest(SecurityLookupRequest):
 
             results = msg.getElement('results')
 
-            for element in results.getElements():
+            for element in results.values():
                 description = element.getElementAsString('description')
                 country = element.getElementAsString('country')
                 currency = element.getElementAsString('country')
@@ -180,7 +180,7 @@ class GovernmentLookupRequest(SecurityLookupRequest):
 
             results = msg.getElement('results')
 
-            for element in results.getElements():
+            for element in results.values():
                 parseky = element.getElementAsString('parseky')
                 name = element.getElementAsString('name')
                 ticker = element.getElementAsString('ticker')

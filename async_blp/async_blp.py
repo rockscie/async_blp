@@ -169,10 +169,10 @@ class AsyncBloomberg:
 
         return result_df, errors
 
-    def security_lookup(self,
-                        query: str,
-                        options: Dict[str, str] = None,
-                        max_results: int = None):
+    async def security_lookup(self,
+                              query: str,
+                              options: Dict[str, str] = None,
+                              max_results: int = 10):
         options = options or {}
         handler = self._choose_handler()
 
@@ -184,10 +184,10 @@ class AsyncBloomberg:
 
         return await task
 
-    def curve_lookup(self,
-                     query: str,
-                     options: Dict[str, str] = None,
-                     max_results: int = None):
+    async def curve_lookup(self,
+                           query: str,
+                           options: Dict[str, str] = None,
+                           max_results: int = 10):
         options = options or {}
         handler = self._choose_handler()
 
@@ -199,10 +199,10 @@ class AsyncBloomberg:
 
         return await task
 
-    def government_lookup(self,
-                          query: str,
-                          options: Dict[str, str] = None,
-                          max_results: int = None):
+    async def government_lookup(self,
+                                query: str,
+                                options: Dict[str, str] = None,
+                                max_results: int = 10):
         options = options or {}
         handler = self._choose_handler()
 

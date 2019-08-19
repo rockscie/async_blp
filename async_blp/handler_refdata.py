@@ -105,9 +105,12 @@ class Handler(AbsHandler):
         their queue) and delete from requests dict
         """
         for corr_id in corr_ids:
-            request = self._current_requests[corr_id]
-            request.send_queue_message(None)
-            del self._current_requests[corr_id]
+            try:
+                request = self._current_requests.pop(corr_id)
+            except KeyError:
+                continue
+            else:
+                request.send_queue_message(None)
 
     @property
     def get_current_weight(self):
