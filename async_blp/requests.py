@@ -111,7 +111,7 @@ class ReferenceDataRequest:
         while True:
 
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
-            msg = await self._msg_queue.get()
+            msg:blpapi.Message = await self._msg_queue.get()
 
             if msg is None:
                 LOGGER.debug('%s: last message received, processing is '
@@ -459,9 +459,58 @@ class SearchField(ReferenceDataRequest):
         """
         request = service.createRequest(self.request_name)
         for field in self._fields:
-            request.append("searchSpec", field)
+            request.set("searchSpec", field)
 
         for key, value in self._overrides.items():
             request.set(key, value)
 
         return request
+
+    async def process(self) -> Tuple[pd.DataFrame, BloombergErrors]:
+        """
+        Asynchronously process events from `msg_queue` until the event with
+        event type RESPONSE is received. This method doesn't check if received
+        events belongs to this request and will return everything that
+        can be parsed.
+
+        Return format is pd.DataFrame with columns as fields and indexes
+        as security_ids.
+        """
+        data_frame = self._get_empty_df()
+        errors = BloombergErrors()
+        data = {}
+        while True:
+
+            LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
+            msg: blpapi.Message = await self._msg_queue.get()
+
+            if msg is None:
+                LOGGER.debug('%s: last message received, processing is '
+                             'finished',
+                             self.__class__.__name__)
+                break
+
+            LOGGER.debug('%s: message received', self.__class__.__name__)
+
+            security_data_element = msg.getElement('category')
+
+            msg_data:List[blpapi.element] = list(security_data_element.values())
+
+            for catdata_data in msg_data:
+                f_data = list(catdata_data.getElement('fieldData').values())
+                for field in f_data:
+                   field_name, id_value = self._parse_field_data(field.getElement('id'))
+                   data[id_value] = {}
+
+                   for desc in field.getElement('fieldInfo').elements():
+                    try:
+                            print(desc)
+                            if not desc.isArray():
+                                field_name, field_value = self._parse_field_data(desc)
+                                data[id_value][field_name] = field_value
+                    except blpapi.exception.InvalidConversionException as Ex:
+                            LOGGER.error(Ex)
+
+
+        return pd.DataFrame(data), errors
+s
