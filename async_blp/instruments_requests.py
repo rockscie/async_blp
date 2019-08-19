@@ -2,13 +2,18 @@ import asyncio
 from typing import Dict
 from typing import Tuple
 
-import blpapi
 import pandas as pd
 
 from .enums import ErrorBehaviour
 from .errors import BloombergErrors
 from .requests import ReferenceDataRequest
 from .utils import log
+
+# pylint: disable=ungrouped-imports
+try:
+    import blpapi
+except ImportError:
+    from async_blp.utils import env_test as blpapi
 
 LOGGER = log.get_logger()
 
@@ -30,7 +35,7 @@ class SecurityLookupRequest(ReferenceDataRequest):
                  error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
                  loop: asyncio.AbstractEventLoop = None):
 
-        super().__init__([], [], None, {}, error_behavior, loop)
+        super().__init__([], [], None, options, error_behavior, loop)
 
         self._max_results = max_results
         self._options = options
