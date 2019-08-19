@@ -8,7 +8,7 @@ import pytest
 
 from async_blp.handler_refdata import RequestHandler
 from async_blp.handler_refdata import SubHandler
-from async_blp.requests import ReferenceDataSubscribe
+from async_blp.requests import SubscribeData
 from async_blp.utils.env_test import CorrelationId
 from async_blp.utils.env_test import Message
 
@@ -222,8 +222,8 @@ class TestSubHandler:
         """
         security_id = 'F Equity'
         field_name = 'MKTDATA'
-        sub = ReferenceDataSubscribe([security_id],
-                                     [field_name])
+        sub = SubscribeData([security_id],
+                            [field_name])
         msg: Message = list(market_data_event)[0]
         cor_id = list(msg.correlationIds())[0]
         sub._ids_sec[cor_id] = security_id

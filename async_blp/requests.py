@@ -373,7 +373,7 @@ class HistoricalDataRequest(ReferenceDataRequest):
                             columns=self._fields)
 
 
-class ReferenceDataSubscribe(ReferenceDataRequest):
+class SubscribeData(ReferenceDataRequest):
     service_name = '//blp/mktdata'
 
     def __init__(self,

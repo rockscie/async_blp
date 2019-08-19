@@ -12,7 +12,9 @@ from typing import Tuple
 import pandas as pd
 
 from async_blp.errors import BloombergErrors
+from async_blp.handler_refdata import SubHandler
 from async_blp.requests import HistoricalDataRequest
+from async_blp.requests import SubscribeData
 from async_blp.utils.misc import split_into_chunks
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
@@ -61,6 +63,8 @@ class AsyncBloomberg:
         self._session_options.setServerPort(port)
 
         self._handlers: List[RequestHandler] = []
+        self._handler_subscriber: SubHandler = SubHandler(self._session_options,
+                                                          loop)
 
         log.set_logger(log_level)
 
@@ -88,7 +92,7 @@ class AsyncBloomberg:
             securities: List[str],
             fields: List[str],
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None,) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None, ) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return reference data from Bloomberg
         """
@@ -126,7 +130,7 @@ class AsyncBloomberg:
             start_date: dt.date,
             end_date: dt.date,
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None,) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None, ) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return historical data from Bloomberg
         """
@@ -164,6 +168,32 @@ class AsyncBloomberg:
             errors += BloombergErrors()
 
         return result_df, errors
+
+    async def add_subscriber(
+            self,
+            securities: List[str],
+            fields: List[str],
+            security_id_type: Optional[SecurityIdType] = None,
+            overrides=None, ) -> None:
+        """
+        all subscribe in one session
+        """
+
+        request = SubscribeData(securities,
+                                fields,
+                                security_id_type,
+                                overrides,
+                                self._error_behaviour,
+                                self._loop)
+
+        await self._handler_subscriber.subscribe([request])
+
+    async def read_subscriber(
+            self) -> pd.DataFrame:
+        """
+        all subscribe in one session
+        """
+        return await self._handler_subscriber.read_subscribers()
 
     def _choose_handler(self) -> RequestHandler:
         """

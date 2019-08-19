@@ -12,7 +12,7 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-from async_blp.requests import ReferenceDataSubscribe
+from async_blp.requests import SubscribeData
 from .abs_handler import AbsHandler
 from .requests import ReferenceDataRequest
 from .utils.blp_name import RESPONSE_ERROR
@@ -317,7 +317,7 @@ class SubHandler(Handler):
         super().__init__(session_options, loop)
 
         self._current_requests: Dict[str,
-                                     ReferenceDataSubscribe] = {}
+                                     SubscribeData] = {}
 
         self._method_map[
             blpapi.Event.SUBSCRIPTION_STATUS] = self._raise_unknown_msg
@@ -343,7 +343,7 @@ class SubHandler(Handler):
                                               ):
                 self._raise_unknown_msg(msg)
 
-    async def subscribe(self, subscribes: List[ReferenceDataSubscribe]):
+    async def subscribe(self, subscribes: List[SubscribeData]):
         """
         Send requests to Bloomberg
 
@@ -360,3 +360,10 @@ class SubHandler(Handler):
             LOGGER.debug('%s: subscribe send:\n%s',
                          self.__class__.__name__,
                          blp_subscribe)
+
+    async def read_subscribers(self):
+        tasks = [asyncio.create_task(request.process())
+                 for request in self._current_requests.values()]
+
+        requests_result = await asyncio.gather(*tasks)
+        return requests_result
