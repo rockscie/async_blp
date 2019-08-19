@@ -5,13 +5,12 @@ from typing import TypeVar
 T = TypeVar('T')
 
 
-def split_into_chunks(iterable: Iterable[T],
+def split_into_chunks(iterable: List[T],
                       chunk_size: int,
                       ) -> Iterable[List[T]]:
     """
     Split given iterable into several iterables of size `chunk_size` or smaller
     """
-    iterable = list(iterable)
     num_chunks = len(iterable) // chunk_size
 
     if len(iterable) % chunk_size != 0:

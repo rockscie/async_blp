@@ -19,6 +19,12 @@ class SecurityIdType(enum.Enum):
     def __str__(self):
         return self.value
 
+    def add_type(self, security_name):
+        return self.value + security_name
+
+    def remove_type(self, security_name):
+        return security_name[len(self.value):]
+
 
 class ErrorBehaviour(enum.Enum):
     """
@@ -27,9 +33,7 @@ class ErrorBehaviour(enum.Enum):
     RAISE - raise exception when Bloomberg reports an error
     RETURN - return all errors in a separate dict
     IGNORE - ignore all errors
-    WARN - print warnings
     """
     RAISE = 'raise'
     RETURN = 'return'
     IGNORE = 'ignore'
-    WARN = 'warn'

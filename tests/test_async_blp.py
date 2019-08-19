@@ -71,3 +71,18 @@ class TestAsyncBloomberg:
     def test__init__not_inside_loop(self):
         with pytest.raises(RuntimeError):
             AsyncBloomberg()
+
+    async def test___divide_reference_data_request(self):
+        bloomberg = AsyncBloomberg(max_fields_per_request=2,
+                                   max_securities_per_request=2)
+
+        securities = ['security_1', 'security_2', 'security_3']
+        fields = ['field_1', 'field_2', 'field_3']
+
+        chunks = list(bloomberg._split_requests(securities, fields))
+
+        assert len(chunks) == 4
+        assert (['security_1', 'security_2'], ['field_1', 'field_2']) in chunks
+        assert (['security_1', 'security_2'], ['field_3']) in chunks
+        assert (['security_3'], ['field_1', 'field_2']) in chunks
+        assert (['security_3'], ['field_3']) in chunks

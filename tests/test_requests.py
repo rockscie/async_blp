@@ -1,9 +1,14 @@
 import asyncio
+import datetime as dt
 
 import pandas as pd
 import pytest
 
 from async_blp.enums import ErrorBehaviour
+from async_blp.enums import SecurityIdType
+from async_blp.errors import BloombergErrors
+from async_blp.errors import ErrorType
+from async_blp.requests import HistoricalDataRequest
 from async_blp.requests import ReferenceDataRequest
 from async_blp.utils.blp_name import ERROR_INFO
 from async_blp.utils.blp_name import FIELD_DATA
@@ -123,6 +128,49 @@ def security_data_simple(simple_field,
 
     field_data = Element(FIELD_DATA, None, [simple_field])
     security = Element(SECURITY, security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:   security,
+                                FIELD_DATA: field_data,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def security_data_historical(simple_field_data):
+    field_name, field_value, security_id = simple_field_data
+
+    value_element = Element(field_name, field_value)
+    date_element = Element('date', dt.date(2018, 1, 1))
+
+    field_data = Element(FIELD_DATA, None,
+                         {
+                             field_name: value_element,
+                             'date':     date_element,
+                             })
+
+    field_data_sequence = Element(FIELD_DATA, None, [field_data])
+
+    security = Element(SECURITY, security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:   security,
+                                FIELD_DATA: field_data_sequence,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def security_data_with_type(simple_field,
+                            simple_field_data):
+    field_name, field_values, security_id = simple_field_data
+
+    field_data = Element(FIELD_DATA, None, [simple_field])
+    security = Element(SECURITY, '/isin/' + security_id)
 
     security_data = Element(SECURITY_DATA, None,
                             {
@@ -331,10 +379,15 @@ class TestReferenceDataRequest:
     def test___parse_field_exceptions(self,
                                       field_exceptions,
                                       simple_field_data):
-        field_name, _, _ = simple_field_data
+        field_name, _, security_id = simple_field_data
 
-        errors = ReferenceDataRequest._parse_field_exceptions(field_exceptions)
-        expected_errors = {field_name: 'Invalid field'}
+        errors = ReferenceDataRequest._parse_field_exceptions(security_id,
+                                                              field_exceptions,
+                                                              )
+        expected_errors = {
+            (security_id, field_name):
+                ErrorType.INVALID_FIELD_HISTORICAL
+            }
 
         assert errors == expected_errors
 
@@ -371,12 +424,10 @@ class TestReferenceDataRequest:
                                        error_behavior=ErrorBehaviour.RETURN)
 
         errors = request._parse_errors(security_data_with_field_exception)
-        expected_errors = {
-            security_id:
-                {
-                    field_name: 'Invalid field'
-                    }
-            }
+
+        expected_errors = BloombergErrors([], {
+            (security_id, field_name): ErrorType.INVALID_FIELD_HISTORICAL,
+            })
 
         assert errors == expected_errors
 
@@ -390,9 +441,7 @@ class TestReferenceDataRequest:
                                        error_behavior=ErrorBehaviour.RETURN)
 
         errors = request._parse_errors(security_data_with_security_error)
-        expected_errors = {
-            security_id: 'Invalid security',
-            }
+        expected_errors = BloombergErrors([security_id], {})
 
         assert errors == expected_errors
 
@@ -448,3 +497,63 @@ class TestReferenceDataRequest:
 
         actual_df, _ = await request.process()
         pd.testing.assert_frame_equal(actual_df, expected_df)
+
+    def test___get_security_id_from_security_data__type_is_none(
+            self,
+            security_data_simple,
+            simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name])
+
+        parsed_security_id = request._get_security_id_from_security_data(
+            security_data_simple)
+
+        assert security_id == parsed_security_id
+
+    def test___get_security_id_from_security_data__type_is_not_none(
+            self,
+            security_data_with_type,
+            simple_field_data):
+        field_name, _, security_id = simple_field_data
+
+        request = ReferenceDataRequest([security_id], [field_name],
+                                       SecurityIdType.ISIN)
+
+        parsed_security_id = request._get_security_id_from_security_data(
+            security_data_with_type)
+
+        assert security_id == parsed_security_id
+
+
+class TestHistoricalDataRequest:
+
+    def test__weight(self):
+        securities = ['security_1', 'security_2', 'security_3']
+        fields = ['field_1', 'field_2', 'field_3']
+        start_date = dt.date(2018, 1, 1)
+        end_date = dt.date(2018, 1, 10)
+
+        request = HistoricalDataRequest(securities, fields,
+                                        start_date, end_date)
+
+        assert request.weight == 3 * 3 * 9
+
+    def test___parse_security_data(self,
+                                   simple_field_data,
+                                   security_data_historical):
+        field_name, field_value, security_id = simple_field_data
+        date = dt.date(2018, 1, 1)
+
+        request = HistoricalDataRequest([security_id], [field_name],
+                                        date, dt.date(2018, 1, 4))
+
+        parsed_df = request._parse_security_data(security_data_historical)
+
+        index = pd.MultiIndex.from_tuples([(pd.Timestamp(date), security_id)],
+                                          names=['date', 'security'])
+        expected_df = pd.DataFrame([field_value],
+                                   index=index,
+                                   columns=[field_name])
+
+        pd.testing.assert_frame_equal(parsed_df, expected_df)

@@ -11,6 +11,8 @@ from typing import Union
 
 import pandas as pd
 
+from async_blp.errors import BloombergErrors
+from async_blp.errors import ErrorType
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
 from .utils import log
@@ -90,10 +92,7 @@ class ReferenceDataRequest:
         self._loop.call_soon_threadsafe(self._msg_queue.put_nowait, msg)
         LOGGER.debug('%s: message sent', self.__class__.__name__)
 
-    async def process(self
-                      ) -> Tuple[pd.DataFrame, Dict[str,
-                                                    Union[str,
-                                                          Dict[str, str]]]]:
+    async def process(self) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Asynchronously process events from `msg_queue` until the event with
         event type RESPONSE is received. This method doesn't check if received
@@ -103,9 +102,8 @@ class ReferenceDataRequest:
         Return format is pd.DataFrame with columns as fields and indexes
         as security_ids.
         """
-        dataframe = pd.DataFrame(columns=self._fields,
-                                 index=self._securities)
-        errors = {}
+        dataframe = self._get_empty_df()
+        errors = BloombergErrors()
 
         while True:
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
@@ -119,7 +117,12 @@ class ReferenceDataRequest:
 
             LOGGER.debug('%s: message received', self.__class__.__name__)
 
-            msg_data = list(msg.getElement(SECURITY_DATA).values())
+            security_data_element = msg.getElement(SECURITY_DATA)
+
+            if security_data_element.isArray():
+                msg_data = list(security_data_element.values())
+            else:
+                msg_data = [security_data_element]
 
             for security_data in msg_data:
                 msg_frame = self._parse_security_data(security_data)
@@ -128,12 +131,23 @@ class ReferenceDataRequest:
 
                 dataframe.loc[index, columns] = msg_frame
 
-            for security_data in msg_data:
                 security_errors = self._parse_errors(security_data)
-                if security_errors:
-                    errors.update(security_errors)
+                if security_errors is not None:
+                    errors += security_errors
 
         return dataframe, errors
+
+    def _get_security_id_from_security_data(self,
+                                            security_data: blpapi.Element):
+        """
+        Retrieve security id from security data and remove type prefix if needed
+        """
+        security_id = security_data.getElementAsString(SECURITY)
+
+        if self._security_id_type is not None:
+            security_id = self._security_id_type.remove_type(security_id)
+
+        return security_id
 
     def _parse_security_data(self,
                              security_data,
@@ -144,7 +158,7 @@ class ReferenceDataRequest:
         Return pd.DataFrame with one row and multiple columns corresponding
         to the received fields.
         """
-        security_id = security_data.getElementAsString(SECURITY)
+        security_id = self._get_security_id_from_security_data(security_data)
 
         field_data: blpapi.Element = security_data.getElement(FIELD_DATA)
 
@@ -162,31 +176,30 @@ class ReferenceDataRequest:
 
     def _parse_errors(self,
                       security_data,
-                      ) -> Optional[Dict[str,
-                                         Union[str,
-                                               Dict[str, str]]]]:
+                      ) -> Optional[BloombergErrors]:
         """
         Check if the given security data has any errors and process them
         according to `self._error_behaviour`
 
-        Return None if exceptions are ignored, or dict containing security
-        and field error messages
+        Return None if exceptions are ignored, otherwise return
+        BloombergErrors instance
         """
         if self._error_behaviour == ErrorBehaviour.IGNORE:
             return None
 
-        security_id = security_data.getElementAsString(SECURITY)
-        security_errors = {}
+        security_id = self._get_security_id_from_security_data(security_data)
+        security_errors = BloombergErrors()
 
         if security_data.hasElement(SECURITY_ERROR):
-            security_errors[security_id] = 'Invalid security'
+            security_errors.invalid_securities.append(security_id)
 
         if security_data.hasElement(FIELD_EXCEPTIONS):
             field_exceptions = security_data.getElement(FIELD_EXCEPTIONS)
-            field_errors = self._parse_field_exceptions(field_exceptions)
+            field_errors = self._parse_field_exceptions(security_id,
+                                                        field_exceptions)
 
             if field_errors:
-                security_errors[security_id] = field_errors
+                security_errors.invalid_fields.update(field_errors)
 
         if self._error_behaviour == ErrorBehaviour.RAISE and security_errors:
             raise BloombergException(security_errors)
@@ -194,11 +207,13 @@ class ReferenceDataRequest:
         return security_errors
 
     @staticmethod
-    def _parse_field_exceptions(field_exceptions) -> Dict[str, str]:
+    def _parse_field_exceptions(security_id: str,
+                                field_exceptions: blpapi.Element,
+                                ) -> Dict[Tuple[str, str], str]:
         """
         Parse field exceptions for one security.
 
-        Return dict {field name : error message}
+        Return dict {(security_id, field name) : error message}
         """
         errors = {}
 
@@ -207,7 +222,12 @@ class ReferenceDataRequest:
             error_info = error.getElement(ERROR_INFO)
             message = error_info.getElementAsString(MESSAGE)
 
-            errors[field] = message
+            try:
+                message = ErrorType(message)
+            except ValueError:
+                pass
+
+            errors[(security_id, field)] = message
 
         return errors
 
@@ -261,13 +281,10 @@ class ReferenceDataRequest:
         """
         request = service.createRequest(self.request_name)
 
-        if self._security_id_type is None:
-            prefix = ''
-        else:
-            prefix = str(self._security_id_type)
-
         for name in self._securities:
-            name = prefix + name
+            if self._security_id_type is not None:
+                self._security_id_type.add_type(name)
+
             request.getElement("securities").appendValue(name)
 
         for field in self._fields:
@@ -285,3 +302,69 @@ class ReferenceDataRequest:
         between handlers
         """
         return len(self._securities) * len(self._fields)
+
+    def _get_empty_df(self):
+        return pd.DataFrame(columns=self._fields,
+                            index=self._securities)
+
+
+class HistoricalDataRequest(ReferenceDataRequest):
+    request_name = 'HistoricalDataRequest'
+
+    # pylint: disable=too-many-arguments
+    def __init__(self,
+                 securities: List[str],
+                 fields: List[str],
+                 start_date: dt.date,
+                 end_date: dt.date,
+                 security_id_type: Optional[SecurityIdType] = None,
+                 overrides: Optional[Dict] = None,
+                 error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
+                 loop: asyncio.AbstractEventLoop = None,
+                 ):
+        self._start_date = start_date
+        self._end_date = end_date
+
+        overrides = overrides or {}
+        overrides['startDate'] = start_date.strftime('%Y%m%d')
+        overrides['endDate'] = end_date.strftime('%Y%m%d')
+
+        super().__init__(securities, fields, security_id_type,
+                         overrides, error_behavior, loop)
+
+    @property
+    def weight(self):
+        num_days = (self._end_date - self._start_date).days
+        return super().weight * num_days
+
+    def _parse_security_data(self, security_data) -> pd.DataFrame:
+        security_id = self._get_security_id_from_security_data(security_data)
+
+        field_data: blpapi.Element = security_data.getElement(FIELD_DATA)
+
+        empty_index = pd.MultiIndex.from_tuples([], names=['date', 'security'])
+        security_df = pd.DataFrame(index=empty_index)
+
+        for fields_sequence in field_data.values():
+            fields_dict = {}
+
+            for field in fields_sequence.elements():
+                field_name, field_value = self._parse_field_data(field)
+                fields_dict[field_name] = field_value
+
+            date = pd.Timestamp(fields_dict['date'])
+            for name, value in fields_dict.items():
+                if name == 'date':
+                    continue
+
+                security_df.at[(date, security_id), name] = value
+
+        return security_df
+
+    def _get_empty_df(self):
+        all_dates = pd.date_range(self._start_date, self._end_date)
+        index = pd.MultiIndex.from_product([all_dates, self._securities],
+                                           names=['date', 'security'])
+
+        return pd.DataFrame(index=index,
+                            columns=self._fields)
