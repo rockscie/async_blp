@@ -320,7 +320,7 @@ class SubHandler(Handler):
                                      SubscribeData] = {}
 
         self._method_map[
-            blpapi.Event.SUBSCRIPTION_STATUS] = self._raise_unknown_msg
+            blpapi.Event.SUBSCRIPTION_STATUS] = self._subscriber_status_handler
         self._method_map[
             blpapi.Event.SUBSCRIPTION_DATA] = self._subscriber_data_handler
 

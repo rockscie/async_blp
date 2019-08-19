@@ -422,11 +422,11 @@ class SubscribeData(ReferenceDataRequest):
         data = {}
         while not self._msg_queue.empty():
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
-            msg = self._msg_queue.get_nowait()
+            msg:blpapi.Message = self._msg_queue.get_nowait()
             for cor_id in msg.correlationIds():
                 if cor_id not in self._ids_sec:
                     continue
-                security_data_element = msg.getElement(MARKET_DATA_EVENTS)
+                security_data_element = msg.asElement()
                 for field in security_data_element.elements():
                     field_name, field_value = self._parse_field_data(field)
                     data[field_name] = {self._ids_sec[cor_id]: field_value}
