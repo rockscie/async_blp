@@ -12,6 +12,7 @@ from typing import Union
 
 import pandas as pd
 
+
 from async_blp.errors import BloombergErrors
 from async_blp.errors import ErrorType
 from async_blp.utils.blp_name import MARKET_DATA_EVENTS
@@ -391,14 +392,17 @@ class SubscribeData(ReferenceDataRequest):
                          error_behavior,
                          loop)
         self._all_fields = self._fields[:]
-        self._ids_sec = {uuid.uuid4(): sec for sec in self._securities}
+        self._ids_sec = {blpapi.CorrelationId(uuid.uuid4()): sec for sec in self._securities}
 
     def create(
             self,
             service: blpapi.Service = None, ) -> blpapi.SubscriptionList:
         s_list = blpapi.SubscriptionList()
         for cor_id, security in self._ids_sec.items():
-            s_list.add(security, self._fields, cor_id)
+            s_list.add(security,
+                       self._fields,
+                       correlationId=cor_id)
+
 
         return s_list
 

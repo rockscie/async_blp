@@ -8,7 +8,7 @@ from async_blp.enums import ErrorBehaviour
 
 async def main(sec=4):
     security_id = 'F US Equity'
-    field = 'PX_PRICE'
+    field = 'LAST_PRICE'
 
     bloomberg = AsyncBloomberg(error_behaviour=ErrorBehaviour.RETURN,
                                log_level=logging.DEBUG)
