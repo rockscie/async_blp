@@ -122,6 +122,7 @@ class ReferenceDataRequest(RequestBase):
 
 
 class HistoricalDataRequest(RequestBase):
+    service_name = "//blp/refdata"
     request_name = 'HistoricalDataRequest'
 
     # pylint: disable=too-many-arguments
