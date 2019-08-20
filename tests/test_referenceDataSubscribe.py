@@ -48,5 +48,5 @@ class TestReferenceDataSubscribe:
         sub._ids_sec[cor_id] = security_id
         sub.send_queue_message(msg)
         await asyncio.sleep(0.0001)
-        data, errors = await sub.process()
+        data = await sub.process()
         assert not data.empty

@@ -517,7 +517,7 @@ class SearchField(ReferenceDataRequest):
 
             for cat_data_data in list(msg.getElement('category').values()):
                 # category[] = { ... }
-                print(cat_data_data)
+
                 field_data_element = cat_data_data.getElement('fieldData')
                 for field in list(field_data_element.values()):
                     # fieldData[] = { ... }
