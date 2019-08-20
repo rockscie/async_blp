@@ -6,7 +6,7 @@ from async_blp.enums import ErrorBehaviour
 
 
 async def main():
-    field = 'LAST_PRICE'
+    field = 'PX_LAST'
 
     bloomberg = AsyncBloomberg(error_behaviour=ErrorBehaviour.RETURN,
                                log_level=logging.DEBUG)

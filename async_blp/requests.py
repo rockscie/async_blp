@@ -530,6 +530,6 @@ class SearchField(ReferenceDataRequest):
                             continue
                         name, value = self._parse_field_data(desc)
                         # description = "Theta Last Price"
-                        data[id_value][name] = value
+                        data[name][id_value] = value
 
         return pd.DataFrame(data)
