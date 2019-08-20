@@ -17,6 +17,7 @@ from async_blp.base_request import RequestBase
 from async_blp.errors import BloombergErrors
 from async_blp.parser import parse_errors
 from async_blp.parser import parse_field_data
+from async_blp.parser import parse_historical_security_data
 from async_blp.parser import parse_reference_security_data
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
@@ -190,7 +191,7 @@ class HistoricalDataRequest(RequestBase):
 
             security_data_element = msg.getElement(SECURITY_DATA)
 
-            msg_frame = parse_reference_security_data(security_data_element)
+            msg_frame = parse_historical_security_data(security_data_element)
             index = msg_frame.index
             columns = msg_frame.columns
 
