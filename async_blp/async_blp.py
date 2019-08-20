@@ -5,6 +5,7 @@ import asyncio
 import datetime as dt
 import logging
 from itertools import product
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -12,6 +13,9 @@ from typing import Tuple
 import pandas as pd
 
 from async_blp.errors import BloombergErrors
+from async_blp.instruments_requests import CurveLookupRequest
+from async_blp.instruments_requests import GovernmentLookupRequest
+from async_blp.instruments_requests import SecurityLookupRequest
 from async_blp.requests import HistoricalDataRequest
 from async_blp.utils.misc import split_into_chunks
 from .enums import ErrorBehaviour
@@ -88,7 +92,7 @@ class AsyncBloomberg:
             securities: List[str],
             fields: List[str],
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None,) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None, ) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return reference data from Bloomberg
         """
@@ -126,7 +130,7 @@ class AsyncBloomberg:
             start_date: dt.date,
             end_date: dt.date,
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None,) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None, ) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return historical data from Bloomberg
         """
@@ -164,6 +168,51 @@ class AsyncBloomberg:
             errors += BloombergErrors()
 
         return result_df, errors
+
+    async def security_lookup(self,
+                              query: str,
+                              options: Dict[str, str] = None,
+                              max_results: int = 10):
+        options = options or {}
+        handler = self._choose_handler()
+
+        request = SecurityLookupRequest(query, options, max_results,
+                                        self._error_behaviour, self._loop)
+
+        task = asyncio.create_task(request.process())
+        asyncio.create_task(handler.send_requests([request]))
+
+        return await task
+
+    async def curve_lookup(self,
+                           query: str,
+                           options: Dict[str, str] = None,
+                           max_results: int = 10):
+        options = options or {}
+        handler = self._choose_handler()
+
+        request = CurveLookupRequest(query, options, max_results,
+                                     self._error_behaviour, self._loop)
+
+        task = asyncio.create_task(request.process())
+        asyncio.create_task(handler.send_requests([request]))
+
+        return await task
+
+    async def government_lookup(self,
+                                query: str,
+                                options: Dict[str, str] = None,
+                                max_results: int = 10):
+        options = options or {}
+        handler = self._choose_handler()
+
+        request = GovernmentLookupRequest(query, options, max_results,
+                                          self._error_behaviour, self._loop)
+
+        task = asyncio.create_task(request.process())
+        asyncio.create_task(handler.send_requests([request]))
+
+        return await task
 
     def _choose_handler(self) -> RequestHandler:
         """
