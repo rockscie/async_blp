@@ -4,6 +4,7 @@ Thus module contains wrappers for different types of Bloomberg requests
 import asyncio
 import datetime as dt
 import uuid
+from collections import defaultdict
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -12,10 +13,8 @@ from typing import Union
 
 import pandas as pd
 
-
 from async_blp.errors import BloombergErrors
 from async_blp.errors import ErrorType
-from async_blp.utils.blp_name import MARKET_DATA_EVENTS
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
 from .utils import log
@@ -111,7 +110,7 @@ class ReferenceDataRequest:
         while True:
 
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
-            msg:blpapi.Message = await self._msg_queue.get()
+            msg: blpapi.Message = await self._msg_queue.get()
 
             if msg is None:
                 LOGGER.debug('%s: last message received, processing is '
@@ -392,7 +391,8 @@ class SubscribeData(ReferenceDataRequest):
                          error_behavior,
                          loop)
         self._all_fields = self._fields[:]
-        self._ids_sec = {blpapi.CorrelationId(uuid.uuid4()): sec for sec in self._securities}
+        self._ids_sec = {blpapi.CorrelationId(uuid.uuid4()): sec for sec in
+                         self._securities}
 
     def create(
             self,
@@ -402,7 +402,6 @@ class SubscribeData(ReferenceDataRequest):
             s_list.add(security,
                        self._fields,
                        correlationId=cor_id)
-
 
         return s_list
 
@@ -419,10 +418,10 @@ class SubscribeData(ReferenceDataRequest):
         as security_ids.
         """
         errors = BloombergErrors()
-        data = {}
+        data = defaultdict(lambda: {})
         while not self._msg_queue.empty():
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
-            msg:blpapi.Message = self._msg_queue.get_nowait()
+            msg: blpapi.Message = self._msg_queue.get_nowait()
             for cor_id in msg.correlationIds():
                 if cor_id not in self._ids_sec:
                     continue
@@ -430,7 +429,7 @@ class SubscribeData(ReferenceDataRequest):
                 for field in security_data_element.elements():
                     try:
                         field_name, field_value = self._parse_field_data(field)
-                        data[field_name] = {self._ids_sec[cor_id]: field_value}
+                        data[field_name][self._ids_sec[cor_id]] = field_value
                     except blpapi.exception.IndexOutOfRangeException as Ex:
                         LOGGER.error(Ex)
 
@@ -450,7 +449,7 @@ class SearchField(ReferenceDataRequest):
         super().__init__([],
                          fields,
                          overrides=overrides,
-                         error_behavior = error_behavior,
+                         error_behavior=error_behavior,
                          loop=loop)
 
     def create(self, service: blpapi.Service) -> blpapi.Request:
@@ -478,7 +477,7 @@ class SearchField(ReferenceDataRequest):
         """
         data_frame = self._get_empty_df()
         errors = BloombergErrors()
-        data = {}
+        data = defaultdict(lambda: {})
         while True:
 
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
@@ -494,23 +493,25 @@ class SearchField(ReferenceDataRequest):
 
             security_data_element = msg.getElement('category')
 
-            msg_data:List[blpapi.element] = list(security_data_element.values())
+            msg_data: List[blpapi.element] = list(
+                security_data_element.values())
 
             for catdata_data in msg_data:
                 f_data = list(catdata_data.getElement('fieldData').values())
                 for field in f_data:
-                   field_name, id_value = self._parse_field_data(field.getElement('id'))
-                   data[id_value] = {}
-
-                   for desc in field.getElement('fieldInfo').elements():
-                    try:
-                            print(desc)
+                    field_name, id_value = self._parse_field_data(
+                        field.getElement('id'))
+                    for desc in field.getElement('fieldInfo').elements():
+                        try:
                             if not desc.isArray():
-                                field_name, field_value = self._parse_field_data(desc)
+                                field_name, field_value = \
+                                    self._parse_field_data(
+                                    desc)
                                 data[id_value][field_name] = field_value
-                    except blpapi.exception.InvalidConversionException as Ex:
+                        except blpapi.exception.InvalidConversionException as Ex:
                             LOGGER.error(Ex)
 
-
         return pd.DataFrame(data), errors
+
+
 s
