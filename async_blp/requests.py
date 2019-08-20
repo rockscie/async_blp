@@ -4,6 +4,7 @@ Thus module contains wrappers for different types of Bloomberg requests
 import asyncio
 import datetime as dt
 import uuid
+from collections import defaultdict
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -14,7 +15,6 @@ import pandas as pd
 
 from async_blp.errors import BloombergErrors
 from async_blp.errors import ErrorType
-from async_blp.utils.blp_name import MARKET_DATA_EVENTS
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
 from .utils import log
@@ -110,7 +110,7 @@ class ReferenceDataRequest:
         while True:
 
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
-            msg = await self._msg_queue.get()
+            msg: blpapi.Message = await self._msg_queue.get()
 
             if msg is None:
                 LOGGER.debug('%s: last message received, processing is '
@@ -373,7 +373,7 @@ class HistoricalDataRequest(ReferenceDataRequest):
                             columns=self._fields)
 
 
-class ReferenceDataSubscribe(ReferenceDataRequest):
+class SubscribeData(ReferenceDataRequest):
     service_name = '//blp/mktdata'
 
     def __init__(self,
@@ -391,14 +391,17 @@ class ReferenceDataSubscribe(ReferenceDataRequest):
                          error_behavior,
                          loop)
         self._all_fields = self._fields[:]
-        self._ids_sec = {uuid.uuid4(): sec for sec in self._securities}
+        self._ids_sec = {blpapi.CorrelationId(uuid.uuid4()): sec for sec in
+                         self._securities}
 
     def create(
             self,
             service: blpapi.Service = None, ) -> blpapi.SubscriptionList:
         s_list = blpapi.SubscriptionList()
         for cor_id, security in self._ids_sec.items():
-            s_list.add(security, self._fields, cor_id)
+            s_list.add(security,
+                       self._fields,
+                       correlationId=cor_id)
 
         return s_list
 
@@ -406,7 +409,7 @@ class ReferenceDataSubscribe(ReferenceDataRequest):
         return pd.DataFrame(columns=self._all_fields,
                             index=self._securities)
 
-    async def process(self) -> Tuple[pd.DataFrame, BloombergErrors]:
+    async def process(self) -> pd.DataFrame:
         """
         Asynchronously process events from `msg_queue` until the event will
         ended
@@ -414,17 +417,119 @@ class ReferenceDataSubscribe(ReferenceDataRequest):
         Return format is pd.DataFrame with columns as fields and indexes
         as security_ids.
         """
-        errors = BloombergErrors()
-        data = {}
+        # errors = BloombergErrors()
+        data = defaultdict(lambda: {})
         while not self._msg_queue.empty():
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
-            msg = self._msg_queue.get_nowait()
+            msg: blpapi.Message = self._msg_queue.get_nowait()
             for cor_id in msg.correlationIds():
                 if cor_id not in self._ids_sec:
                     continue
-                security_data_element = msg.getElement(MARKET_DATA_EVENTS)
+                security_data_element = msg.asElement()
                 for field in security_data_element.elements():
-                    field_name, field_value = self._parse_field_data(field)
-                    data[field_name] = {self._ids_sec[cor_id]: field_value}
+                    try:
+                        field_name, field_value = self._parse_field_data(field)
+                        data[field_name][self._ids_sec[cor_id]] = field_value
+                    except blpapi.exception.IndexOutOfRangeException as ex:
+                        LOGGER.error(ex)
 
-        return pd.DataFrame(data), errors
+        return pd.DataFrame(data)
+
+
+class SearchField(ReferenceDataRequest):
+    """
+    Try find field in FLDS
+    """
+    service_name = "//blp/apiflds"
+    request_name = "CategorizedFieldSearchRequest"
+
+    def __init__(self,
+                 fields: List[str],
+                 overrides: Optional[Dict] = None,
+                 error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
+                 loop: asyncio.AbstractEventLoop = None,
+                 ):
+        super().__init__([],
+                         fields,
+                         overrides=overrides,
+                         error_behavior=error_behavior,
+                         loop=loop)
+
+    def create(self, service: blpapi.Service) -> blpapi.Request:
+        """
+        Create Bloomberg request. Given `service` must be opened beforehand.
+        """
+        request = service.createRequest(self.request_name)
+        for field in self._fields:
+            request.set("searchSpec", field)
+
+        for key, value in self._overrides.items():
+            request.set(key, value)
+
+        return request
+
+    async def process(self) -> pd.DataFrame:
+        """
+        Asynchronously process events from `msg_queue` until the event with
+        event type RESPONSE is received. This method doesn't check if received
+        events belongs to this request and will return everything that
+        can be parsed.
+
+        Return format is pd.DataFrame with columns as fields and indexes
+        as security_ids.
+
+        categorizedFieldResponse = {
+            category[] = {
+                category = {
+                    categoryName = "Analysis"
+                    categoryId = "4670040a019000e0"
+                    numFields = 293
+                    description = "Analysis"
+                    isLeafNode = false
+                    fieldData[] = {
+                        fieldData = {
+                            id = "OP179"
+                            fieldInfo = {
+                                mnemonic = "THETA_LAST"
+                                description = "Theta Last Price"
+                                datatype = Double
+                                categoryName[] = {
+                                }
+                                property[] = {
+                                }
+
+
+        """
+        # data_frame = self._get_empty_df()
+        # errors = BloombergErrors()
+        data = defaultdict(lambda: {})
+        while True:
+            LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
+            msg: blpapi.Message = await self._msg_queue.get()
+
+            if msg is None:
+                LOGGER.debug('%s: last message received, processing is '
+                             'finished',
+                             self.__class__.__name__)
+                break
+
+            LOGGER.debug('%s: message received', self.__class__.__name__)
+
+            for cat_data_data in list(msg.getElement('category').values()):
+                # category[] = { ... }
+
+                field_data_element = cat_data_data.getElement('fieldData')
+                for field in list(field_data_element.values()):
+                    # fieldData[] = { ... }
+                    id_element = field.getElement('id')
+                    _, id_value = self._parse_field_data(id_element)
+                    for desc in field.getElement('fieldInfo').elements():
+                        # fieldInfo ={ ... }
+                        if desc.isArray():
+                            # categoryName[] = { empty }
+                            continue
+                        name, value = self._parse_field_data(desc)
+                        # description = "Theta Last Price"
+                        data[name][id_value] = value
+
+        return pd.DataFrame(data)

@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from async_blp.requests import ReferenceDataSubscribe
+from async_blp.requests import SubscribeData
 from async_blp.utils.env_test import Message
 from async_blp.utils.env_test import SubscriptionList
 
@@ -29,8 +29,8 @@ class TestReferenceDataSubscribe:
         for Subscribe you do not need anything more open session
         """
         field_name, security_id = simple_field_data
-        sub = ReferenceDataSubscribe([security_id],
-                                     [field_name])
+        sub = SubscribeData([security_id],
+                            [field_name])
 
         assert isinstance(sub.create(), SubscriptionList)
 
@@ -41,12 +41,12 @@ class TestReferenceDataSubscribe:
         """
         security_id = 'F Equity'
         field_name = 'MKTDATA'
-        sub = ReferenceDataSubscribe([security_id],
-                                     [field_name])
+        sub = SubscribeData([security_id],
+                            [field_name])
         msg: Message = list(market_data_event)[0]
         cor_id = list(msg.correlationIds())[0]
         sub._ids_sec[cor_id] = security_id
         sub.send_queue_message(msg)
         await asyncio.sleep(0.0001)
-        data, errors = await sub.process()
+        data = await sub.process()
         assert not data.empty

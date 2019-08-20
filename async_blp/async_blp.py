@@ -12,12 +12,15 @@ from typing import Tuple
 
 import pandas as pd
 
-from async_blp.errors import BloombergErrors
-from async_blp.instruments_requests import CurveLookupRequest
-from async_blp.instruments_requests import GovernmentLookupRequest
-from async_blp.instruments_requests import SecurityLookupRequest
-from async_blp.requests import HistoricalDataRequest
-from async_blp.utils.misc import split_into_chunks
+from .errors import BloombergErrors
+from .handler_refdata import SubHandler
+from .instruments_requests import CurveLookupRequest
+from .instruments_requests import GovernmentLookupRequest
+from .instruments_requests import SecurityLookupRequest
+from .requests import HistoricalDataRequest
+from .requests import SearchField
+from .requests import SubscribeData
+from .utils.misc import split_into_chunks
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
 from .handler_refdata import RequestHandler
@@ -65,6 +68,8 @@ class AsyncBloomberg:
         self._session_options.setServerPort(port)
 
         self._handlers: List[RequestHandler] = []
+        self._handler_subscriber: SubHandler = SubHandler(self._session_options,
+                                                          loop)
 
         log.set_logger(log_level)
 
@@ -123,6 +128,28 @@ class AsyncBloomberg:
 
         return result_df, errors
 
+    async def search_fields(
+            self,
+            fields: List[str],
+            overrides=None, ) -> pd.DataFrame:
+        """
+        Return reference data from Bloomberg
+        """
+
+        request = SearchField(fields,
+                              overrides,
+                              self._error_behaviour,
+                              self._loop)
+        handler = self._choose_handler()
+
+        asyncio.create_task(handler.send_requests([request]))
+
+        requests_result = await request.process()
+
+        data = requests_result
+
+        return data
+
     async def get_historical_data(
             self,
             securities: List[str],
@@ -168,6 +195,33 @@ class AsyncBloomberg:
             errors += BloombergErrors()
 
         return result_df, errors
+
+
+    async def add_subscriber(
+            self,
+            securities: List[str],
+            fields: List[str],
+            security_id_type: Optional[SecurityIdType] = None,
+            overrides=None, ) -> None:
+        """
+        all subscribe in one session
+        """
+
+        request = SubscribeData(securities,
+                                fields,
+                                security_id_type,
+                                overrides,
+                                self._error_behaviour,
+                                self._loop)
+
+        await self._handler_subscriber.subscribe([request])
+
+    async def read_subscriber(
+            self) -> pd.DataFrame:
+        """
+        all subscribe in one session
+        """
+        return await self._handler_subscriber.read_subscribers()
 
     async def security_lookup(self,
                               query: str,

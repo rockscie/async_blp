@@ -6,20 +6,18 @@ from async_blp.enums import ErrorBehaviour
 
 
 async def main():
-    security_id = 'F US Equity'
-    field = 'LAST_PRICE'
+    field = 'PX_LAST'
 
     bloomberg = AsyncBloomberg(error_behaviour=ErrorBehaviour.RETURN,
                                log_level=logging.DEBUG)
 
-    data, errors = await bloomberg.get_reference_data([security_id], [field])
+    data = await bloomberg.search_fields([field])
 
     await bloomberg.stop()
 
-    return data, errors
+    return data
 
 
 if __name__ == '__main__':
-    data, errors = asyncio.run(main())
+    data = asyncio.run(main())
     print('Data received', data)
-    print('Errors received:', errors)
