@@ -68,8 +68,7 @@ class AsyncBloomberg:
         self._session_options.setServerPort(port)
 
         self._request_handlers: List[RequestHandler] = []
-        self._subscription_handler = SubscriptionHandler(self._session_options,
-                                                         self._loop)
+        self._subscription_handler: Optional[SubscriptionHandler] = None
 
         log.set_logger(log_level)
 
@@ -87,8 +86,14 @@ class AsyncBloomberg:
         for handler in self._request_handlers:
             handler.stop_session()
 
-        all_events = [handler.session_stopped.wait()
-                      for handler in self._request_handlers]
+        if self._subscription_handler:
+            self._subscription_handler.stop_session()
+            all_events = [self._subscription_handler.session_stopped.wait()]
+        else:
+            all_events = []
+
+        all_events.extend(handler.session_stopped.wait()
+                          for handler in self._request_handlers)
 
         await asyncio.gather(*all_events)
 
@@ -216,12 +221,21 @@ class AsyncBloomberg:
                                self._error_behaviour,
                                self._loop)
 
+        if self._subscription_handler is None:
+            self._subscription_handler = SubscriptionHandler(
+                self._session_options,
+                self._loop)
+
         await self._subscription_handler.subscribe([request])
 
     async def read_subscriber(self) -> pd.DataFrame:
         """
         all subscribe in one session
         """
+        if self._subscription_handler is None:
+            raise RuntimeError('You have to subscribe before reading '
+                               'subscription data')
+
         return await self._subscription_handler.read_subscribers()
 
     async def security_lookup(self,
