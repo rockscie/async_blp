@@ -18,7 +18,7 @@ class TestAsyncBloomberg:
         """
         bloomberg = AsyncBloomberg()
         handler = RequestHandler(session_options)
-        bloomberg._handlers.append(handler)
+        bloomberg._request_handlers.append(handler)
 
         chosen_handler = bloomberg._choose_handler()
 
@@ -36,7 +36,7 @@ class TestAsyncBloomberg:
         corr_id = CorrelationId(uuid.uuid4())
 
         handler._current_requests[corr_id] = request
-        bloomberg._handlers.append(handler)
+        bloomberg._request_handlers.append(handler)
 
         chosen_handler = bloomberg._choose_handler()
 
@@ -61,8 +61,8 @@ class TestAsyncBloomberg:
 
         handler_1._current_requests[corr_id_1] = request_1
         handler_2._current_requests[corr_id_2] = request_2
-        bloomberg._handlers.append(handler_1)
-        bloomberg._handlers.append(handler_2)
+        bloomberg._request_handlers.append(handler_1)
+        bloomberg._request_handlers.append(handler_2)
 
         chosen_handler = bloomberg._choose_handler()
 

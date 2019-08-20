@@ -19,10 +19,10 @@ class SecurityIdType(enum.Enum):
     def __str__(self):
         return self.value
 
-    def add_type(self, security_name):
+    def add_type(self, security_name: str) -> str:
         return self.value + security_name
 
-    def remove_type(self, security_name):
+    def remove_type(self, security_name: str) -> str:
         return security_name[len(self.value):]
 
 

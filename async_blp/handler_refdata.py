@@ -12,9 +12,9 @@ from typing import List
 from typing import Optional
 from typing import Union
 
-from async_blp.requests import SubscribeData
+from async_blp.base_request import RequestBase
+from async_blp.requests import Subscription
 from .abs_handler import AbsHandler
-from .requests import ReferenceDataRequest
 from .utils.blp_name import RESPONSE_ERROR
 from .utils.log import get_logger
 
@@ -59,7 +59,7 @@ class Handler(AbsHandler):
         """
 
         self._current_requests: Dict[blpapi.CorrelationId,
-                                     ReferenceDataRequest] = {}
+                                     RequestBase] = {}
         super().__init__(loop)
         self._session = blpapi.Session(options=session_options,
                                        eventHandler=self)
@@ -242,7 +242,7 @@ class RequestHandler(Handler):
         self._method_map[blpapi.Event.REQUEST_STATUS] = self._raise_unknown_msg
         self._method_map[blpapi.Event.TIMEOUT] = self._raise_unknown_msg
 
-    async def send_requests(self, requests: List[ReferenceDataRequest]):
+    async def send_requests(self, requests: List[RequestBase]):
         """
         Send requests to Bloomberg
 
@@ -306,7 +306,7 @@ class RequestHandler(Handler):
             self._close_requests(msg.correlationIds())
 
 
-class SubHandler(Handler):
+class SubscriptionHandler(Handler):
     """
     Handler gets response events from Bloomberg from other thread,
     then puts it to request queue. Each handler opens its own session
@@ -320,7 +320,7 @@ class SubHandler(Handler):
         super().__init__(session_options, loop)
 
         self._current_requests: Dict[str,
-                                     SubscribeData] = {}
+                                     Subscription] = {}
 
         self._method_map[
             blpapi.Event.SUBSCRIPTION_STATUS] = self._subscriber_status_handler
@@ -346,7 +346,7 @@ class SubHandler(Handler):
                                               ):
                 self._raise_unknown_msg(msg)
 
-    async def subscribe(self, subscribes: List[SubscribeData]):
+    async def subscribe(self, subscribes: List[Subscription]):
         """
         Send requests to Bloomberg
 
@@ -358,7 +358,7 @@ class SubHandler(Handler):
         for subscribe in subscribes:
             corr_id = str(uuid.uuid4())
             self._current_requests[corr_id] = subscribe
-            blp_subscribe = subscribe.create()
+            blp_subscribe = subscribe.create_subscription()
             self._session.subscribe(blp_subscribe, requestLabel=corr_id)
             LOGGER.debug('%s: subscribe send:\n%s',
                          self.__class__.__name__,

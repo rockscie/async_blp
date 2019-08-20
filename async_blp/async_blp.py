@@ -12,20 +12,20 @@ from typing import Tuple
 
 import pandas as pd
 
+from .enums import ErrorBehaviour
+from .enums import SecurityIdType
 from .errors import BloombergErrors
-from .handler_refdata import SubHandler
+from .handler_refdata import RequestHandler
+from .handler_refdata import SubscriptionHandler
 from .instruments_requests import CurveLookupRequest
 from .instruments_requests import GovernmentLookupRequest
 from .instruments_requests import SecurityLookupRequest
 from .requests import HistoricalDataRequest
-from .requests import SearchField
-from .requests import SubscribeData
-from .utils.misc import split_into_chunks
-from .enums import ErrorBehaviour
-from .enums import SecurityIdType
-from .handler_refdata import RequestHandler
 from .requests import ReferenceDataRequest
+from .requests import SearchField
+from .requests import Subscription
 from .utils import log
+from .utils.misc import split_into_chunks
 
 # pylint: disable=ungrouped-imports
 try:
@@ -67,9 +67,9 @@ class AsyncBloomberg:
         self._session_options.setServerHost(host)
         self._session_options.setServerPort(port)
 
-        self._handlers: List[RequestHandler] = []
-        self._handler_subscriber: SubHandler = SubHandler(self._session_options,
-                                                          loop)
+        self._request_handlers: List[RequestHandler] = []
+        self._subscription_handler = SubscriptionHandler(self._session_options,
+                                                         self._loop)
 
         log.set_logger(log_level)
 
@@ -84,11 +84,11 @@ class AsyncBloomberg:
         This method waits for all handlers to successfully
         stop their sessions.
         """
-        for handler in self._handlers:
+        for handler in self._request_handlers:
             handler.stop_session()
 
         all_events = [handler.session_stopped.wait()
-                      for handler in self._handlers]
+                      for handler in self._request_handlers]
 
         await asyncio.gather(*all_events)
 
@@ -97,7 +97,8 @@ class AsyncBloomberg:
             securities: List[str],
             fields: List[str],
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None, ) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None,
+            ) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return reference data from Bloomberg
         """
@@ -124,19 +125,19 @@ class AsyncBloomberg:
 
         for data, error in requests_result:
             result_df.loc[data.index, data.columns] = data
-            errors += (error)
+            errors += error
 
         return result_df, errors
 
-    async def search_fields(
-            self,
-            fields: List[str],
-            overrides=None, ) -> pd.DataFrame:
+    async def search_fields(self,
+                            query: str,
+                            overrides=None,
+                            ) -> pd.DataFrame:
         """
         Return reference data from Bloomberg
         """
 
-        request = SearchField(fields,
+        request = SearchField(query,
                               overrides,
                               self._error_behaviour,
                               self._loop)
@@ -157,7 +158,8 @@ class AsyncBloomberg:
             start_date: dt.date,
             end_date: dt.date,
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None, ) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None,
+            ) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Return historical data from Bloomberg
         """
@@ -196,32 +198,31 @@ class AsyncBloomberg:
 
         return result_df, errors
 
-
     async def add_subscriber(
             self,
             securities: List[str],
             fields: List[str],
             security_id_type: Optional[SecurityIdType] = None,
-            overrides=None, ) -> None:
+            overrides=None,
+            ) -> None:
         """
         all subscribe in one session
         """
 
-        request = SubscribeData(securities,
-                                fields,
-                                security_id_type,
-                                overrides,
-                                self._error_behaviour,
-                                self._loop)
+        request = Subscription(securities,
+                               fields,
+                               security_id_type,
+                               overrides,
+                               self._error_behaviour,
+                               self._loop)
 
-        await self._handler_subscriber.subscribe([request])
+        await self._subscription_handler.subscribe([request])
 
-    async def read_subscriber(
-            self) -> pd.DataFrame:
+    async def read_subscriber(self) -> pd.DataFrame:
         """
         all subscribe in one session
         """
-        return await self._handler_subscriber.read_subscribers()
+        return await self._subscription_handler.read_subscribers()
 
     async def security_lookup(self,
                               query: str,
@@ -280,18 +281,18 @@ class AsyncBloomberg:
 
         """
         free_handlers = [handler
-                         for handler in self._handlers
+                         for handler in self._request_handlers
                          if not handler.get_current_weight]
 
         if free_handlers:
             return free_handlers[0]
 
-        if len(self._handlers) < self._max_sessions:
+        if len(self._request_handlers) < self._max_sessions:
             handler = RequestHandler(self._session_options, self._loop)
-            self._handlers.append(handler)
+            self._request_handlers.append(handler)
             return handler
 
-        return min([handler for handler in self._handlers],
+        return min([handler for handler in self._request_handlers],
                    key=lambda handler: handler.get_current_weight)
 
     def _split_requests(self,

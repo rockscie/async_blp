@@ -5,12 +5,21 @@ For testing purposes, please use `Session.send_event` method that emulates
 blpapi and opens another thread. You can also call the needed handler method
 directly.
 """
+import datetime as dt
 import logging
 
 import pytest
 
 from async_blp.requests import ReferenceDataRequest
 from async_blp.utils import log
+from async_blp.utils.blp_name import ERROR_INFO
+from async_blp.utils.blp_name import FIELD_DATA
+from async_blp.utils.blp_name import FIELD_EXCEPTIONS
+from async_blp.utils.blp_name import FIELD_ID
+from async_blp.utils.blp_name import MESSAGE
+from async_blp.utils.blp_name import SECURITY
+from async_blp.utils.blp_name import SECURITY_DATA
+from async_blp.utils.blp_name import SECURITY_ERROR
 from async_blp.utils.env_test import CorrelationId
 from async_blp.utils.env_test import Element
 from async_blp.utils.env_test import Event
@@ -208,3 +217,219 @@ def market_data_event(market_data):
                     )]
 
     return Event(Event.SUBSCRIPTION_DATA, msgs)
+
+
+@pytest.fixture()
+def simple_field_data():
+    field_name = 'PX_LAST'
+    field_value = 10.2
+    security_id = 'F Equity'
+
+    return field_name, field_value, security_id
+
+
+@pytest.fixture()
+def simple_field(simple_field_data):
+    name, value, _ = simple_field_data
+
+    return Element(name, value)
+
+
+@pytest.fixture()
+def one_value_array_field_data():
+    field_name = 'BLOOMBERG_PEERS'
+    field_values = ['GM US', 'TSLA US']
+    security_id = 'AAPL Equity'
+
+    return field_name, field_values, security_id
+
+
+@pytest.fixture()
+def one_value_array_field(one_value_array_field_data):
+    field_name, field_values, _ = one_value_array_field_data
+
+    fields = [Element('Peer ticker', value)
+              for value in field_values]
+
+    array_elements = [Element(field_name, None, {field_name: element})
+                      for element in fields]
+
+    top_level_element = Element(field_name, None, array_elements)
+
+    return top_level_element
+
+
+@pytest.fixture()
+def multi_value_array_field_data():
+    field_name = 'INDX_MWEIGHT'
+    field_values = [
+        {
+            'Member Ticker and Exchange Code': "1332 JT",
+            'Percentage Weight ':              0.108078
+            },
+        {
+            'Member Ticker and Exchange Code': "1333 JT",
+            'Percentage Weight ':              0.048529
+            },
+        ]
+    security_id = '/bbgid/BBG000HX8KM1'
+
+    return field_name, field_values, security_id
+
+
+@pytest.fixture()
+def multi_value_array_field(multi_value_array_field_data):
+    field_name, field_values, _ = multi_value_array_field_data
+
+    dict_elements = [{name: Element(name, value)
+                      for name, value in values_dict.items()}
+                     for values_dict in field_values]
+
+    array_elements = [Element(field_name, None, dict_element)
+                      for dict_element in dict_elements]
+
+    top_level_element = Element(field_name, None, array_elements)
+
+    return top_level_element
+
+
+@pytest.fixture()
+def security_data_array(one_value_array_field,
+                        one_value_array_field_data):
+    field_name, field_values, security_id = one_value_array_field_data
+
+    field_data = Element(FIELD_DATA, None, [one_value_array_field])
+    security = Element(SECURITY, security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:   security,
+                                FIELD_DATA: field_data,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def security_data_simple(simple_field,
+                         simple_field_data):
+    field_name, field_values, security_id = simple_field_data
+
+    field_data = Element(FIELD_DATA, None, [simple_field])
+    security = Element(SECURITY, security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:   security,
+                                FIELD_DATA: field_data,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def security_data_historical(simple_field_data):
+    field_name, field_value, security_id = simple_field_data
+
+    value_element = Element(field_name, field_value)
+    date_element = Element('date', dt.date(2018, 1, 1))
+
+    field_data = Element(FIELD_DATA, None,
+                         {
+                             field_name: value_element,
+                             'date':     date_element,
+                             })
+
+    field_data_sequence = Element(FIELD_DATA, None, [field_data])
+
+    security = Element(SECURITY, security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:   security,
+                                FIELD_DATA: field_data_sequence,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def security_data_with_type(simple_field,
+                            simple_field_data):
+    field_name, field_values, security_id = simple_field_data
+
+    field_data = Element(FIELD_DATA, None, [simple_field])
+    security = Element(SECURITY, '/isin/' + security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:   security,
+                                FIELD_DATA: field_data,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def response_msg_one_security(security_data_array):
+    children = Element(SECURITY_DATA, None, [security_data_array])
+
+    return Message('Response', None, {SECURITY_DATA: children})
+
+
+@pytest.fixture()
+def response_msg_several_securities(security_data_array,
+                                    security_data_simple):
+    children = Element(SECURITY_DATA, None, [security_data_array,
+                                             security_data_simple])
+
+    return Message('Response', None, {SECURITY_DATA: children})
+
+
+@pytest.fixture()
+def field_exceptions(simple_field_data):
+    field_name, _, _ = simple_field_data
+
+    field_id = Element(FIELD_ID, field_name)
+    message = Element(MESSAGE, 'Invalid field')
+    error_info = Element(ERROR_INFO, None, {MESSAGE: message})
+
+    field_exception = Element(FIELD_EXCEPTIONS, None,
+                              {
+                                  FIELD_ID:   field_id,
+                                  ERROR_INFO: error_info,
+                                  })
+
+    field_exceptions = Element(FIELD_EXCEPTIONS, None, [field_exception])
+    return field_exceptions
+
+
+@pytest.fixture()
+def security_data_with_field_exception(simple_field_data, field_exceptions):
+    field_name, _, security_id = simple_field_data
+
+    security = Element(SECURITY, security_id)
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:         security,
+                                FIELD_EXCEPTIONS: field_exceptions,
+                                })
+
+    return security_data
+
+
+@pytest.fixture()
+def security_data_with_security_error(simple_field_data):
+    field_name, _, security_id = simple_field_data
+
+    security = Element(SECURITY, security_id)
+    security_error = Element(SECURITY_ERROR, 'Invalid security')
+
+    security_data = Element(SECURITY_DATA, None,
+                            {
+                                SECURITY:       security,
+                                SECURITY_ERROR: security_error,
+                                })
+
+    return security_data

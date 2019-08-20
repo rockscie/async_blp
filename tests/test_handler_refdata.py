@@ -7,8 +7,8 @@ import uuid
 import pytest
 
 from async_blp.handler_refdata import RequestHandler
-from async_blp.handler_refdata import SubHandler
-from async_blp.requests import SubscribeData
+from async_blp.handler_refdata import SubscriptionHandler
+from async_blp.requests import Subscription
 from async_blp.utils.env_test import CorrelationId
 from async_blp.utils.env_test import Message
 
@@ -197,7 +197,7 @@ class TestSubHandler:
         """
         ignore start subscriber
         """
-        s_handler = SubHandler(session_options)
+        s_handler = SubscriptionHandler(session_options)
         s_handler._subscriber_status_handler(start_subscribe_event)
         assert True
 
@@ -207,7 +207,7 @@ class TestSubHandler:
         """
         raise wrong event
         """
-        s_handler = SubHandler(session_options)
+        s_handler = SubscriptionHandler(session_options)
         name = list(market_data_event)[0].name()
         print(name)
         with pytest.raises(ValueError) as excinfo:
@@ -222,13 +222,13 @@ class TestSubHandler:
         """
         security_id = 'F Equity'
         field_name = 'MKTDATA'
-        sub = SubscribeData([security_id],
-                            [field_name])
+        sub = Subscription([security_id],
+                           [field_name])
         msg: Message = list(market_data_event)[0]
         cor_id = list(msg.correlationIds())[0]
-        sub._ids_sec[cor_id] = security_id
+        sub._security_mapping[cor_id] = security_id
 
-        s_handler = SubHandler(session_options)
+        s_handler = SubscriptionHandler(session_options)
         s_handler.session_started.set()
         await s_handler.subscribe([sub])
         await asyncio.sleep(0.00001)
