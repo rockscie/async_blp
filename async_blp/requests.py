@@ -417,7 +417,7 @@ class SubscribeData(ReferenceDataRequest):
         Return format is pd.DataFrame with columns as fields and indexes
         as security_ids.
         """
-        errors = BloombergErrors()
+        # errors = BloombergErrors()
         data = defaultdict(lambda: {})
         while not self._msg_queue.empty():
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
@@ -430,13 +430,16 @@ class SubscribeData(ReferenceDataRequest):
                     try:
                         field_name, field_value = self._parse_field_data(field)
                         data[field_name][self._ids_sec[cor_id]] = field_value
-                    except blpapi.exception.IndexOutOfRangeException as Ex:
-                        LOGGER.error(Ex)
+                    except blpapi.exception.IndexOutOfRangeException as ex:
+                        LOGGER.error(ex)
 
         return pd.DataFrame(data)
 
 
 class SearchField(ReferenceDataRequest):
+    """
+    Try find field in FLDS
+    """
     service_name = "//blp/apiflds"
     request_name = "CategorizedFieldSearchRequest"
 
@@ -465,7 +468,7 @@ class SearchField(ReferenceDataRequest):
 
         return request
 
-    async def process(self) -> Tuple[pd.DataFrame, BloombergErrors]:
+    async def process(self) -> pd.DataFrame:
         """
         Asynchronously process events from `msg_queue` until the event with
         event type RESPONSE is received. This method doesn't check if received
@@ -474,12 +477,33 @@ class SearchField(ReferenceDataRequest):
 
         Return format is pd.DataFrame with columns as fields and indexes
         as security_ids.
+
+        categorizedFieldResponse = {
+            category[] = {
+                category = {
+                    categoryName = "Analysis"
+                    categoryId = "4670040a019000e0"
+                    numFields = 293
+                    description = "Analysis"
+                    isLeafNode = false
+                    fieldData[] = {
+                        fieldData = {
+                            id = "OP179"
+                            fieldInfo = {
+                                mnemonic = "THETA_LAST"
+                                description = "Theta Last Price"
+                                datatype = Double
+                                categoryName[] = {
+                                }
+                                property[] = {
+                                }
+
+
         """
-        data_frame = self._get_empty_df()
-        errors = BloombergErrors()
+        # data_frame = self._get_empty_df()
+        # errors = BloombergErrors()
         data = defaultdict(lambda: {})
         while True:
-
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
             msg: blpapi.Message = await self._msg_queue.get()
 
@@ -491,27 +515,21 @@ class SearchField(ReferenceDataRequest):
 
             LOGGER.debug('%s: message received', self.__class__.__name__)
 
-            security_data_element = msg.getElement('category')
-
-            msg_data: List[blpapi.element] = list(
-                security_data_element.values())
-
-            for catdata_data in msg_data:
-                f_data = list(catdata_data.getElement('fieldData').values())
-                for field in f_data:
-                    field_name, id_value = self._parse_field_data(
-                        field.getElement('id'))
+            for cat_data_data in list(msg.getElement('category').values()):
+                # category[] = { ... }
+                print(cat_data_data)
+                field_data_element = cat_data_data.getElement('fieldData')
+                for field in list(field_data_element.values()):
+                    # fieldData[] = { ... }
+                    id_element = field.getElement('id')
+                    _, id_value = self._parse_field_data(id_element)
                     for desc in field.getElement('fieldInfo').elements():
-                        try:
-                            if not desc.isArray():
-                                field_name, field_value = \
-                                    self._parse_field_data(
-                                    desc)
-                                data[id_value][field_name] = field_value
-                        except blpapi.exception.InvalidConversionException as Ex:
-                            LOGGER.error(Ex)
+                        # fieldInfo ={ ... }
+                        if desc.isArray():
+                            # categoryName[] = { empty }
+                            continue
+                        name, value = self._parse_field_data(desc)
+                        # description = "Theta Last Price"
+                        data[id_value][name] = value
 
-        return pd.DataFrame(data), errors
-
-
-s
+        return pd.DataFrame(data)

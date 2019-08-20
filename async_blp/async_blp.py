@@ -127,7 +127,7 @@ class AsyncBloomberg:
     async def search_fields(
             self,
             fields: List[str],
-            overrides=None, ) -> Tuple[pd.DataFrame, BloombergErrors]:
+            overrides=None, ) -> pd.DataFrame:
         """
         Return reference data from Bloomberg
         """
@@ -142,9 +142,9 @@ class AsyncBloomberg:
 
         requests_result = await request.process()
 
-        data, error = requests_result
+        data = requests_result
 
-        return data, error
+        return data
 
     async def get_historical_data(
             self,

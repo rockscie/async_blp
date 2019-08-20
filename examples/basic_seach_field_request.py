@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 
@@ -12,14 +11,13 @@ async def main():
     bloomberg = AsyncBloomberg(error_behaviour=ErrorBehaviour.RETURN,
                                log_level=logging.DEBUG)
 
-    data, errors = await bloomberg.search_fields([field])
+    data = await bloomberg.search_fields([field])
 
     await bloomberg.stop()
 
-    return data, errors
+    return data
 
 
 if __name__ == '__main__':
-    data, errors = asyncio.run(main())
+    data = asyncio.run(main())
     print('Data received', data)
-    print('Errors received:', errors)
