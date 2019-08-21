@@ -107,7 +107,6 @@ class AsyncBloomberg:
         """
         Return reference data from Bloomberg
         """
-
         chunks = self._split_requests(securities, fields)
         request_tasks = []
 

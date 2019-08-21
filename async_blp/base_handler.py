@@ -86,7 +86,7 @@ class HandlerBase:
             blpapi.Event.UNKNOWN:              self._raise_exception
             }
 
-    def stop_session(self):
+    def stop_session(self):  # pragma: no cover
         """
         Close all requests and begin the process to stop session.
         Application must wait for the `session_stopped` event to be set
@@ -103,7 +103,7 @@ class HandlerBase:
         for corr_id in corr_ids:
             try:
                 request = self._current_requests.pop(corr_id)
-            except KeyError:
+            except KeyError:  # pragma: no cover
                 continue
             else:
                 request.send_queue_message(None)
@@ -162,10 +162,12 @@ class HandlerBase:
             LOGGER.debug('%s: session stopped', self.__class__.__name__)
             self._loop.call_soon_threadsafe(self.session_stopped.set)
 
-        elif msg_name in {'SessionConnectionUp', 'SessionConnectionDown'}:
+        elif msg_name in {'SessionConnectionUp',
+                          'SessionConnectionDown'}:  # pragma: no cover
             LOGGER.debug('%s: %s', self.__class__.__name__, msg_name)
 
-        elif msg_name in {'SessionClusterInfo', 'SessionClusterUpdate'}:
+        elif msg_name in {'SessionClusterInfo',
+                          'SessionClusterUpdate'}:  # pragma: no cover
             # maybe do smth meaningful in the future
             pass
 
@@ -195,7 +197,7 @@ class HandlerBase:
             # ServiceOpenedFailure
             self._raise_exception(msg)
 
-    def _admin_handler(self, event_):
+    def _admin_handler(self, event_):  # pragma: no cover
         """
         Process blpapi.Event.ADMIN events. This includes warnings about slow
         consumer and possible data loss

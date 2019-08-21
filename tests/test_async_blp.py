@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 import pytest
@@ -9,6 +10,7 @@ from async_blp.utils.env_test import CorrelationId
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(5)
 class TestAsyncBloomberg:
 
     async def test___choose_handler__free_handler_available(self,
@@ -87,5 +89,25 @@ class TestAsyncBloomberg:
         assert (['security_3'], ['field_1', 'field_2']) in chunks
         assert (['security_3'], ['field_3']) in chunks
 
-    async def test__get_reference_data(self):
-        pass
+    @pytest.mark.skip
+    async def test__get_reference_data(self,
+                                       one_value_array_field_data,
+                                       response_event,
+                                       open_session_event,
+                                       open_service_event):
+        field_name, field_values, security_id = one_value_array_field_data
+
+        bloomberg = AsyncBloomberg(max_sessions=1)
+
+        handler = bloomberg._choose_handler()
+        session = handler._session
+
+        session.send_event(open_session_event)
+        session.send_event(open_service_event)
+
+        task = asyncio.create_task(bloomberg.get_reference_data([security_id],
+                                                                [field_name]))
+
+        session.send_event(response_event)
+
+        print(await task)

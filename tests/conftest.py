@@ -85,19 +85,49 @@ def stop_session_event():
 
 
 @pytest.fixture()
+def session_failure_event():
+    """
+    SessionStopped event that is the very last event that Bloomberg sends,
+    after user calls `session.stopAsync`
+    """
+    event_ = Event(type_=Event.SESSION_STATUS,
+                   msgs=[Message(value=0,
+                                 name='SessionStartupFailure',
+                                 ),
+                         ]
+                   )
+    return event_
+
+
+@pytest.fixture()
 def open_service_event():
     """
     ServiceOpened event, indicates that service was successfully opened
     """
-    event_ = Event(type_=Event.SERVICE_STATUS,
-                   msgs=[Message(value=0, name='ServiceOpened',
-                                 children={
-                                     'serviceName':
-                                         Element(
-                                             value="//blp/refdata")
-                                     }
-                                 ), ]
-                   )
+    msg = Message(value=0,
+                  name='ServiceOpened',
+                  children={
+                      'serviceName': Element(value="//blp/refdata")
+                      }
+                  )
+
+    event_ = Event(type_=Event.SERVICE_STATUS, msgs=[msg])
+    return event_
+
+
+@pytest.fixture()
+def service_opened_failure_event():
+    """
+    ServiceOpened event, indicates that service was successfully opened
+    """
+    msg = Message(value=0,
+                  name='ServiceOpenedFailure',
+                  children={
+                      'serviceName': Element(value="//blp/refdata")
+                      }
+                  )
+
+    event_ = Event(type_=Event.SERVICE_STATUS, msgs=[msg])
     return event_
 
 
@@ -373,6 +403,12 @@ def response_msg_one_security(security_data_array):
     children = Element(SECURITY_DATA, None, [security_data_array])
 
     return Message('Response', None, {SECURITY_DATA: children})
+
+
+@pytest.fixture()
+def response_event(response_msg_one_security):
+    event = Event('RESPONSE', [response_msg_one_security])
+    return event
 
 
 @pytest.fixture()
