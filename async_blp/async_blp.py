@@ -15,8 +15,8 @@ import pandas as pd
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
 from .errors import BloombergErrors
-from .handler_refdata import RequestHandler
-from .handler_refdata import SubscriptionHandler
+from .handlers import RequestHandler
+from .handlers import SubscriptionHandler
 from .instruments_requests import CurveLookupRequest
 from .instruments_requests import GovernmentLookupRequest
 from .instruments_requests import SecurityLookupRequest
@@ -89,7 +89,7 @@ class AsyncBloomberg:
         if self._subscription_handler:
             self._subscription_handler.stop_session()
             all_events = [self._subscription_handler.session_stopped.wait()]
-        else:
+        else:  # pragma: no cover
             all_events = []
 
         all_events.extend(handler.session_stopped.wait()
@@ -245,7 +245,7 @@ class AsyncBloomberg:
         options = options or {}
         handler = self._choose_handler()
 
-        request = SecurityLookupRequest(query, options, max_results,
+        request = SecurityLookupRequest(query, max_results, options,
                                         self._error_behaviour, self._loop)
 
         task = asyncio.create_task(request.process())
@@ -260,7 +260,7 @@ class AsyncBloomberg:
         options = options or {}
         handler = self._choose_handler()
 
-        request = CurveLookupRequest(query, options, max_results,
+        request = CurveLookupRequest(query, max_results, options,
                                      self._error_behaviour, self._loop)
 
         task = asyncio.create_task(request.process())
@@ -275,7 +275,7 @@ class AsyncBloomberg:
         options = options or {}
         handler = self._choose_handler()
 
-        request = GovernmentLookupRequest(query, options, max_results,
+        request = GovernmentLookupRequest(query, max_results, options,
                                           self._error_behaviour, self._loop)
 
         task = asyncio.create_task(request.process())
@@ -296,7 +296,7 @@ class AsyncBloomberg:
         """
         free_handlers = [handler
                          for handler in self._request_handlers
-                         if not handler.get_current_weight]
+                         if not handler.current_load]
 
         if free_handlers:
             return free_handlers[0]
@@ -307,7 +307,7 @@ class AsyncBloomberg:
             return handler
 
         return min([handler for handler in self._request_handlers],
-                   key=lambda handler: handler.get_current_weight)
+                   key=lambda handler: handler.current_load)
 
     def _split_requests(self,
                         securities: List[str],

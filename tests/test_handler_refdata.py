@@ -6,17 +6,16 @@ import uuid
 
 import pytest
 
-from async_blp.handler_refdata import RequestHandler
-from async_blp.handler_refdata import SubscriptionHandler
+from async_blp.handlers import RequestHandler
+from async_blp.handlers import SubscriptionHandler
 from async_blp.requests import Subscription
 from async_blp.utils.env_test import CorrelationId
 from async_blp.utils.env_test import Message
-
-
 # pylint does not like pytest.fixture but we do
 # pylint: disable=redefined-outer-name
 # we need protected access in tests
 # pylint: disable=protected-access
+from async_blp.utils.exc import BloombergException
 
 
 @pytest.mark.asyncio
@@ -209,8 +208,8 @@ class TestSubHandler:
         """
         s_handler = SubscriptionHandler(session_options)
         name = list(market_data_event)[0].name()
-        print(name)
-        with pytest.raises(ValueError) as excinfo:
+
+        with pytest.raises(BloombergException) as excinfo:
             s_handler._subscriber_status_handler(market_data_event)
         assert name in str(excinfo.value)
 

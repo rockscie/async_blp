@@ -13,14 +13,14 @@ from typing import Union
 
 import pandas as pd
 
-from async_blp.base_request import RequestBase
-from async_blp.errors import BloombergErrors
-from async_blp.parser import parse_errors
-from async_blp.parser import parse_field_data
-from async_blp.parser import parse_historical_security_data
-from async_blp.parser import parse_reference_security_data
+from .base_request import RequestBase
 from .enums import ErrorBehaviour
 from .enums import SecurityIdType
+from .errors import BloombergErrors
+from .parser import parse_errors
+from .parser import parse_field_data
+from .parser import parse_historical_security_data
+from .parser import parse_reference_security_data
 from .utils import log
 from .utils.blp_name import SECURITY_DATA
 

@@ -1,6 +1,4 @@
 """
-All fixtures are samples of blpapi events
-
 For testing purposes, please use `Session.send_event` method that emulates
 blpapi and opens another thread. You can also call the needed handler method
 directly.

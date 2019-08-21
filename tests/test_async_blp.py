@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from async_blp import AsyncBloomberg
-from async_blp.handler_refdata import RequestHandler
+from async_blp.handlers import RequestHandler
 from async_blp.requests import ReferenceDataRequest
 from async_blp.utils.env_test import CorrelationId
 
@@ -86,3 +86,6 @@ class TestAsyncBloomberg:
         assert (['security_1', 'security_2'], ['field_3']) in chunks
         assert (['security_3'], ['field_1', 'field_2']) in chunks
         assert (['security_3'], ['field_3']) in chunks
+
+    async def test__get_reference_data(self):
+        pass

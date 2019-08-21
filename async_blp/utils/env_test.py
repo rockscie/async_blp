@@ -12,13 +12,13 @@ except ImportError:
 import enum
 import queue
 import threading
+from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
-from async_blp.abs_handler import AbsHandler
-from async_blp.utils import log
+from . import log
 
 LOGGER = log.get_logger()
 
@@ -383,7 +383,7 @@ class Session:
         For tests: do nothing, threads will be created later where necessary
         """
 
-    def _async_start(self, handler: AbsHandler):
+    def _async_start(self, handler: Callable[['Event', 'Session'], None]):
         """
         Doesn't exists in blpapi; for testing purposes only
         Send all events from `self.events` to the handler one by one.
@@ -391,7 +391,7 @@ class Session:
         while not self.events.empty():
             event = self.events.get(timeout=1)
             LOGGER.debug('Calling handler with %s', event.eventType())
-            handler(event, handler._session)
+            handler(event, Session())
 
     def openServiceAsync(self, *args, **kwargs):
         """
