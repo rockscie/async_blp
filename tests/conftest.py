@@ -29,11 +29,13 @@ from async_blp.utils.env_test import SessionOptions
 # pylint: disable=redefined-outer-name
 
 
-@pytest.fixture(autouse=True, scope='session')
+@pytest.fixture(autouse=True, scope='function')
 def debug_logs():
     """
     Show all logs for tests
     """
+    log.set_logger(logging.DEBUG)
+    yield
     log.set_logger(logging.DEBUG)
 
 
@@ -241,7 +243,7 @@ def market_data_event(market_data):
                                     },
                                 )
                         },
-                    correlationId=CorrelationId("test"),
+                    correlationId=CorrelationId(None),
                     )]
 
     return Event(Event.SUBSCRIPTION_DATA, msgs)
@@ -467,3 +469,99 @@ def security_data_with_security_error(simple_field_data):
                                 })
 
     return security_data
+
+
+@pytest.fixture()
+def field_search_msg():
+    field_info = Element('fieldInfo', None, {
+        'description':  Element('description', 'Theta Last Price'),
+        'mnemonic':     Element('mnemonic', 'THETA_LAST'),
+        'datatype':     Element('datatype', 'Double'),
+        'categoryName': Element('categoryName', None, [Element('')]),
+        })
+
+    field_data = Element('fieldData', None, {
+        'id':        Element('id', 'OP179'),
+        'fieldInfo': field_info,
+        })
+
+    field_data_array = Element('fieldData', None, [field_data])
+
+    category = Element('category', None, {
+        'fieldData': field_data_array,
+        })
+
+    category_array = Element('category', None, [category])
+
+    message = Message('categorizedFieldResponse', None,
+                      {'category': category_array})
+
+    return message
+
+
+@pytest.fixture()
+def security_lookup_msg():
+    security = Element('security', 'F US Equity')
+    description = Element('description', 'Ford Motors Co')
+
+    element = Element('element', None, {
+        'security':    security,
+        'description': description,
+        })
+
+    results_array = Element('results', None, [element])
+
+    message = Message('securityLookupResponse', None,
+                      {'results': results_array})
+
+    return message
+
+
+@pytest.fixture()
+def curve_lookup_msg():
+    description = Element('description', 'GOLD')
+    country = Element('country', 'US')
+    currency = Element('currency', 'USD')
+    curveid = Element('curveid', 'CD1016')
+    type_ = Element('type', 'CORP')
+    subtype = Element('subtype', 'CDS')
+    publisher = Element('publisher', 'Bloomberg')
+    bbgid = Element('bbgid', 'YCCD1016')
+
+    element = Element('element', None, {
+        'description': description,
+        'country':     country,
+        'currency':    currency,
+        'curveid':     curveid,
+        'type':        type_,
+        'subtype':     subtype,
+        'publisher':   publisher,
+        'bbgid':       bbgid,
+        })
+
+    results_array = Element('results', None, [element])
+
+    message = Message('curveLookupResponse', None,
+                      {'results': results_array})
+
+    return message
+
+
+@pytest.fixture()
+def government_lookup_msg():
+    parseky = Element('parseky', 'T')
+    name = Element('name', 'Treasuries')
+    ticker = Element('ticker', 'T')
+
+    element = Element('element', None, {
+        'parseky': parseky,
+        'name':    name,
+        'ticker':  ticker,
+        })
+
+    results_array = Element('results', None, [element])
+
+    message = Message('govtLookupResponse', None,
+                      {'results': results_array})
+
+    return message

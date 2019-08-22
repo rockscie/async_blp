@@ -1,12 +1,10 @@
 """
 Emulate blpapi for tests
-please  use
 
+Sample usage:
 try:
-    # pylint: disable=ungrouped-imports
     import blpapi
 except ImportError:
-    # pylint: disable=ungrouped-imports
     from async_blp import env_test as blpapi
 """
 import enum
@@ -23,14 +21,14 @@ from . import log
 LOGGER = log.get_logger()
 
 
-# pylint: disable=invalid-name
-# pylint: disable=unused-argument
+# pylint: disable=invalid-name, unused-argument
+
 # we need protected access in tests
 # pylint: disable=protected-access
 
 class SubscriptionList:
     """
-    eache Subscription for one asset
+    Each Subscription is for one asset
     """
 
     def add(self,

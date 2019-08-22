@@ -94,10 +94,7 @@ class ReferenceDataRequest(RequestBase):
 
             security_data_element = msg.getElement(SECURITY_DATA)
 
-            if security_data_element.isArray():
-                msg_data = list(security_data_element.values())
-            else:
-                msg_data = [security_data_element]
+            msg_data = list(security_data_element.values())
 
             for security_data in msg_data:
                 msg_frame = parse_reference_security_data(security_data)
@@ -262,6 +259,7 @@ class Subscription(ReferenceDataRequest):
                         isin = self._security_mapping[cor_id]
                         data[field_name][isin] = field_value
 
+                    # pragma: no cover
                     except blpapi.exception.IndexOutOfRangeException as ex:
                         # todo check what is happening (field is empty)
                         LOGGER.error(ex)
@@ -269,7 +267,7 @@ class Subscription(ReferenceDataRequest):
         return pd.DataFrame(data)
 
 
-class SearchField(RequestBase):
+class FieldSearchRequest(RequestBase):
     """
     FLDS lookup
     """
@@ -288,7 +286,8 @@ class SearchField(RequestBase):
             'searchSpec': query,
             }
 
-        request_options.update(overrides)
+        if overrides:
+            request_options.update(overrides)
 
         super().__init__(request_options,
                          error_behavior=error_behavior,
@@ -296,7 +295,7 @@ class SearchField(RequestBase):
 
         self._query = query
 
-    async def process(self) -> pd.DataFrame:
+    async def process(self) -> Tuple[pd.DataFrame, BloombergErrors]:
         """
         Asynchronously process events from `msg_queue` until the event with
         event type RESPONSE is received. This method doesn't check if received
@@ -348,16 +347,18 @@ class SearchField(RequestBase):
 
                     for desc in field.getElement('fieldInfo').elements():
                         # fieldInfo ={ ... }
+
                         if desc.isArray():
-                            # categoryName[] = { empty }
+                            # ignore array fields because they are usually empty
+                            # categoryName[] = {}
                             continue
 
                         name, value = parse_field_data(desc)
                         # description = "Theta Last Price"
                         data[name][id_value] = value
 
-        return pd.DataFrame(data)
+        return pd.DataFrame(data), BloombergErrors()
 
     @property
     def weight(self) -> int:
-        return 1
+        return 1  # pragma: no cover

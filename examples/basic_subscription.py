@@ -13,11 +13,11 @@ async def main(sec=4):
     bloomberg = AsyncBloomberg(error_behaviour=ErrorBehaviour.RETURN,
                                log_level=logging.DEBUG)
 
-    await bloomberg.add_subscriber([security_id], [field])
+    await bloomberg.subscribe([security_id], [field])
     start = dt.datetime.now()
     data = []
     while (dt.datetime.now() - start) < dt.timedelta(seconds=sec):
-        data.append(await bloomberg.read_subscriber())
+        data.append(await bloomberg.read_subscriptions())
         await asyncio.sleep(1)
 
     await bloomberg.stop()

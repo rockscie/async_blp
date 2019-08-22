@@ -20,9 +20,9 @@ from .handlers import SubscriptionHandler
 from .instruments_requests import CurveLookupRequest
 from .instruments_requests import GovernmentLookupRequest
 from .instruments_requests import SecurityLookupRequest
+from .requests import FieldSearchRequest
 from .requests import HistoricalDataRequest
 from .requests import ReferenceDataRequest
-from .requests import SearchField
 from .requests import Subscription
 from .utils import log
 from .utils.misc import split_into_chunks
@@ -141,17 +141,17 @@ class AsyncBloomberg:
         Return reference data from Bloomberg
         """
 
-        request = SearchField(query,
-                              overrides,
-                              self._error_behaviour,
-                              self._loop)
+        request = FieldSearchRequest(query,
+                                     overrides,
+                                     self._error_behaviour,
+                                     self._loop)
         handler = self._choose_handler()
 
         asyncio.create_task(handler.send_requests([request]))
 
         requests_result = await request.process()
 
-        data = requests_result
+        data, _ = requests_result
 
         return data
 
@@ -202,7 +202,7 @@ class AsyncBloomberg:
 
         return result_df, errors
 
-    async def add_subscriber(
+    async def subscribe(
             self,
             securities: List[str],
             fields: List[str],
@@ -210,26 +210,26 @@ class AsyncBloomberg:
             overrides=None,
             ) -> None:
         """
-        all subscribe in one session
+        Subscribe to receive periodical updates from Bloomberg
         """
 
-        request = Subscription(securities,
-                               fields,
-                               security_id_type,
-                               overrides,
-                               self._error_behaviour,
-                               self._loop)
+        subscription = Subscription(securities,
+                                    fields,
+                                    security_id_type,
+                                    overrides,
+                                    self._error_behaviour,
+                                    self._loop)
 
         if self._subscription_handler is None:
             self._subscription_handler = SubscriptionHandler(
                 self._session_options,
                 self._loop)
 
-        await self._subscription_handler.subscribe([request])
+        await self._subscription_handler.subscribe([subscription])
 
-    async def read_subscriber(self) -> pd.DataFrame:
+    async def read_subscriptions(self) -> pd.DataFrame:
         """
-        all subscribe in one session
+        Receive all currently available subscription data
         """
         if self._subscription_handler is None:
             raise RuntimeError('You have to subscribe before reading '

@@ -101,6 +101,12 @@ class HandlerBase:
         their queue) and delete from current requests dict
         """
         for corr_id in corr_ids:
+
+            # this is strictly for testing
+            if corr_id is None:  # pragma: no cover
+                for request in self._current_requests.values():
+                    request.send_queue_message(None)
+
             try:
                 request = self._current_requests.pop(corr_id)
             except KeyError:  # pragma: no cover

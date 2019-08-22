@@ -1,16 +1,22 @@
 import asyncio
+import datetime as dt
 import uuid
 
+import pandas as pd
 import pytest
 
 from async_blp import AsyncBloomberg
+from async_blp.errors import BloombergErrors
 from async_blp.handlers import RequestHandler
 from async_blp.requests import ReferenceDataRequest
+from async_blp.utils.blp_name import SECURITY_DATA
 from async_blp.utils.env_test import CorrelationId
+from async_blp.utils.env_test import Event
+from async_blp.utils.env_test import Message
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(10)
 class TestAsyncBloomberg:
 
     async def test___choose_handler__free_handler_available(self,
@@ -89,7 +95,6 @@ class TestAsyncBloomberg:
         assert (['security_3'], ['field_1', 'field_2']) in chunks
         assert (['security_3'], ['field_3']) in chunks
 
-    @pytest.mark.skip
     async def test__get_reference_data(self,
                                        one_value_array_field_data,
                                        response_event,
@@ -104,10 +109,172 @@ class TestAsyncBloomberg:
 
         session.send_event(open_session_event)
         session.send_event(open_service_event)
+        loop = asyncio.get_running_loop()
+        loop.call_later(1, session.send_event, response_event)
 
-        task = asyncio.create_task(bloomberg.get_reference_data([security_id],
-                                                                [field_name]))
+        data, errors = await bloomberg.get_reference_data([security_id],
+                                                          [field_name])
+        assert errors == BloombergErrors()
 
-        session.send_event(response_event)
+        expected_data = pd.DataFrame([[field_values]],
+                                     index=[security_id],
+                                     columns=[field_name],
+                                     )
 
-        print(await task)
+        pd.testing.assert_frame_equal(expected_data, data)
+
+    async def test__get_historical_data(self,
+                                        security_data_historical,
+                                        simple_field_data,
+                                        open_session_event,
+                                        open_service_event):
+        field_name, field_value, security_id = simple_field_data
+
+        response_event = Event('RESPONSE', [
+            Message('Response', None, {
+                SECURITY_DATA: security_data_historical,
+                })
+            ])
+
+        bloomberg = AsyncBloomberg(max_sessions=1)
+
+        handler = bloomberg._choose_handler()
+        session = handler._session
+
+        session.send_event(open_session_event)
+        session.send_event(open_service_event)
+        loop = asyncio.get_running_loop()
+        loop.call_later(1, session.send_event, response_event)
+
+        index = pd.MultiIndex.from_tuples([
+            (pd.Timestamp(dt.date(2018, 1, 1)), security_id),
+            (pd.Timestamp(dt.date(2018, 1, 2)), security_id),
+            (pd.Timestamp(dt.date(2018, 1, 3)), security_id),
+            (pd.Timestamp(dt.date(2018, 1, 4)), security_id),
+            (pd.Timestamp(dt.date(2018, 1, 5)), security_id),
+            ],
+            names=['date', 'security'])
+
+        expected_data = pd.DataFrame([field_value, None, None, None, None],
+                                     index=index,
+                                     columns=[field_name],
+                                     dtype=object)
+
+        data, errors = await bloomberg.get_historical_data([security_id],
+                                                           [field_name],
+                                                           dt.date(2018, 1, 1),
+                                                           dt.date(2018, 1, 5))
+
+        assert errors == BloombergErrors()
+
+        pd.testing.assert_frame_equal(expected_data, data)
+
+    async def test__search_fields(self, field_search_msg, open_session_event,
+                                  open_service_event):
+        event = Event('RESPONSE', [field_search_msg])
+
+        bloomberg = AsyncBloomberg(max_sessions=1)
+
+        handler = bloomberg._choose_handler()
+        session = handler._session
+
+        session.send_event(open_session_event)
+        session.send_event(open_service_event)
+        loop = asyncio.get_running_loop()
+        loop.call_later(1, session.send_event, event)
+
+        data = await bloomberg.search_fields('Price')
+
+        expected_data = pd.DataFrame([['Theta Last Price', 'THETA_LAST',
+                                       'Double']],
+                                     index=['OP179'],
+                                     columns=['description', 'mnemonic',
+                                              'datatype'])
+
+        pd.testing.assert_frame_equal(expected_data, data)
+
+    async def test__security_lookup(self, open_service_event,
+                                    open_session_event, security_lookup_msg):
+        event = Event('RESPONSE', [security_lookup_msg])
+
+        bloomberg = AsyncBloomberg(max_sessions=1)
+
+        handler = bloomberg._choose_handler()
+        session = handler._session
+
+        session.send_event(open_session_event)
+        session.send_event(open_service_event)
+        loop = asyncio.get_running_loop()
+        loop.call_later(1, session.send_event, event)
+
+        data, _ = await bloomberg.security_lookup('Ford')
+
+        expected_data = pd.DataFrame([['F US Equity', 'Ford Motors Co']],
+                                     columns=['security', 'description'])
+
+        pd.testing.assert_frame_equal(expected_data, data)
+
+    async def test__curve_lookup(self, open_service_event,
+                                 open_session_event, curve_lookup_msg):
+        event = Event('RESPONSE', [curve_lookup_msg])
+
+        bloomberg = AsyncBloomberg(max_sessions=1)
+
+        handler = bloomberg._choose_handler()
+        session = handler._session
+
+        session.send_event(open_session_event)
+        session.send_event(open_service_event)
+        loop = asyncio.get_running_loop()
+        loop.call_later(1, session.send_event, event)
+
+        data, _ = await bloomberg.curve_lookup('Ford')
+
+        expected_data = pd.DataFrame([['GOLD',
+                                       'US',
+                                       'USD',
+                                       'CD1016',
+                                       'CORP',
+                                       'CDS',
+                                       'Bloomberg',
+                                       'YCCD1016',
+                                       ]],
+                                     columns=['description',
+                                              'country',
+                                              'currency',
+                                              'curveid',
+                                              'type',
+                                              'subtype',
+                                              'publisher',
+                                              'bbgid',
+                                              ])
+
+        pd.testing.assert_frame_equal(expected_data, data)
+
+    async def test__government_lookup(self, open_service_event,
+                                      open_session_event,
+                                      government_lookup_msg):
+        event = Event('RESPONSE', [government_lookup_msg])
+
+        bloomberg = AsyncBloomberg(max_sessions=1)
+
+        handler = bloomberg._choose_handler()
+        session = handler._session
+
+        session.send_event(open_session_event)
+        session.send_event(open_service_event)
+        loop = asyncio.get_running_loop()
+        loop.call_later(1, session.send_event, event)
+
+        data, _ = await bloomberg.government_lookup('Ford')
+
+        expected_data = pd.DataFrame([['T',
+                                       'Treasuries',
+                                       'T',
+                                       ]],
+                                     columns=['parseky',
+                                              'name',
+                                              'ticker',
+                                              ])
+
+        pd.testing.assert_frame_equal(expected_data, data)

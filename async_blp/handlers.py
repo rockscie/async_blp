@@ -96,6 +96,13 @@ class RequestHandler(HandlerBase):
                 continue
 
             for cor_id in msg.correlationIds():
+
+                # this is strictly for tests
+                if cor_id is None:  # pragma: no cover
+                    for request in self._current_requests.values():
+                        request.send_queue_message(msg)
+                    continue
+
                 request = self._current_requests[cor_id]
                 request.send_queue_message(msg)
 
