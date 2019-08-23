@@ -1,0 +1,5 @@
+site_name: async_blp
+nav:
+    - Overview: index.md
+    - Tutorial: tutorial.md
+theme: readthedocs

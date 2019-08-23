@@ -21,7 +21,7 @@ More request types will be added in the future.
 
 You can install async_blp from PyPI using
 
-```
+```cmd
 pip install async_blp
 ```
 
@@ -50,14 +50,14 @@ Before using **async_blp**, install **blpapi** from the link above and login in 
 import async_blp
 
 async def blp_example(loop):
-  bloomberg = async_blp.AsyncBloomberg(loop=loop)
+    bloomberg = async_blp.AsyncBloomberg(loop=loop)
   
-  data, _ = await bloomberg.get_reference_data(['F US Equity'], ['LAST_PRICE'])
+    data, _ = await bloomberg.get_reference_data(['F US Equity'], ['LAST_PRICE'])
   
-  # it is important to wait until Bloomberg successfully closes all the sessions
-  await bloomberg.stop()
+    # it is important to wait until Bloomberg successfully closes all the sessions
+    await bloomberg.stop()
   
-  return data
+    return data
 ```
 
 More examples can be found here: https://github.com/rockscie/async_blp/tree/master/examples
