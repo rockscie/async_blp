@@ -52,6 +52,8 @@ class TestRequestHandler:
                                             "" \
                                             "" \
                                             "" \
+                                            "" \
+                                            "" \
                                             "id"
 
         task.cancel()
@@ -106,16 +108,17 @@ class TestSubscriptionHandler:
         """
         security_id = 'F Equity'
         field_name = 'MKTDATA'
-        sub = Subscription([security_id],
+        sub = Subscription(security_id,
                            [field_name])
         msg: Message = list(market_data_event)[0]
-        cor_id = list(msg.correlationIds())[0]
-        sub._security_mapping[cor_id] = security_id
 
         s_handler = SubscriptionHandler(session_options)
         s_handler.session_started.set()
         await s_handler.subscribe([sub])
         await asyncio.sleep(0.00001)
+        s_handler._current_requests = {
+            msg.correlationIds()[0]: sub
+            }
         s_handler._subscriber_data_handler(market_data_event)
         await asyncio.sleep(0.00001)
 

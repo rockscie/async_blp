@@ -8,6 +8,7 @@ from async_blp.requests import FieldSearchRequest
 from async_blp.requests import HistoricalDataRequest
 from async_blp.requests import ReferenceDataRequest
 from async_blp.requests import Subscription
+from async_blp.utils.env_test import CorrelationId
 from async_blp.utils.env_test import Message
 from async_blp.utils.env_test import Service
 from async_blp.utils.env_test import SubscriptionList
@@ -172,25 +173,25 @@ class TestSubscription:
 
     def test__create(self, simple_field_data):
         field_name, _, security_id = simple_field_data
-        subscription = Subscription([security_id], [field_name])
+        subscription = Subscription(security_id, [field_name])
 
         with pytest.raises(RuntimeError):
             subscription.create(Service())
 
     def test__create_subscription(self, simple_field_data):
         field_name, _, security_id = simple_field_data
-        sub = Subscription([security_id], [field_name])
+        sub = Subscription(security_id, [field_name])
 
-        assert isinstance(sub.create_subscription(), SubscriptionList)
+        assert isinstance(sub.create_subscription(corr_id=CorrelationId(None)),
+                          SubscriptionList)
 
     async def test__process(self, market_data_event):
         security_id = 'F Equity'
         field_name = 'MKTDATA'
-        sub = Subscription([security_id],
+        sub = Subscription(security_id,
                            [field_name])
         msg: Message = list(market_data_event)[0]
         cor_id = list(msg.correlationIds())[0]
-        sub._security_mapping[cor_id] = security_id
         sub.send_queue_message(msg)
         await asyncio.sleep(0.0001)
         data = await sub.process()

@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import uuid
+from typing import Callable
 
 import pandas as pd
 import pytest
@@ -18,6 +19,29 @@ from async_blp.utils.env_test import Message
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 class TestAsyncBloomberg:
+
+    async def _create_task(self,
+                           open_session_event: Event,
+                           open_service_event: Event,
+                           event: Event,
+                           l_func: Callable):
+        """
+        create AsyncBloomberg and send l_func
+        look on all preparation will be complete for get result
+        """
+        bloomberg = AsyncBloomberg(max_sessions=1)
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(l_func(bloomberg))
+        handler = bloomberg._choose_handler()
+        session = handler._session
+
+        session.send_event(open_session_event)
+        session.send_event(open_service_event)
+        await asyncio.sleep(0.0001)
+        self.put_id_in_handler(event, handler)
+        session.send_event(event)
+        response = await task
+        return response
 
     async def test___choose_handler__free_handler_available(self,
                                                             session_options):
@@ -38,6 +62,7 @@ class TestAsyncBloomberg:
         When there are no free handlers and `max_sessions` is not reached,
         new handler should be created
         """
+
         bloomberg = AsyncBloomberg()
         handler = RequestHandler(session_options)
         request = ReferenceDataRequest(['security_id'], ['field'])
@@ -95,6 +120,13 @@ class TestAsyncBloomberg:
         assert (['security_3'], ['field_1', 'field_2']) in chunks
         assert (['security_3'], ['field_3']) in chunks
 
+    @staticmethod
+    def put_id_in_handler(response_event, handler):
+        msg = list(response_event.msgs)[0]
+        cor_id = msg.correlationIds()[0]
+        req = list(handler._current_requests.values())[0]
+        handler._current_requests = {cor_id: req}
+
     async def test__get_reference_data(self,
                                        one_value_array_field_data,
                                        response_event,
@@ -102,18 +134,13 @@ class TestAsyncBloomberg:
                                        open_service_event):
         field_name, field_values, security_id = one_value_array_field_data
 
-        bloomberg = AsyncBloomberg(max_sessions=1)
+        def ref_send(bloomberg):
+            return bloomberg.get_reference_data([security_id], [field_name])
 
-        handler = bloomberg._choose_handler()
-        session = handler._session
-
-        session.send_event(open_session_event)
-        session.send_event(open_service_event)
-        loop = asyncio.get_running_loop()
-        loop.call_later(1, session.send_event, response_event)
-
-        data, errors = await bloomberg.get_reference_data([security_id],
-                                                          [field_name])
+        data, errors = await self._create_task(open_session_event,
+                                               open_service_event,
+                                               response_event,
+                                               ref_send)
         assert errors == BloombergErrors()
 
         expected_data = pd.DataFrame([[field_values]],
@@ -136,15 +163,17 @@ class TestAsyncBloomberg:
                 })
             ])
 
-        bloomberg = AsyncBloomberg(max_sessions=1)
+        def hist_send(bloomberg):
+            return bloomberg.get_historical_data(
+                [security_id],
+                [field_name],
+                dt.date(2018, 1, 1),
+                dt.date(2018, 1, 5))
 
-        handler = bloomberg._choose_handler()
-        session = handler._session
-
-        session.send_event(open_session_event)
-        session.send_event(open_service_event)
-        loop = asyncio.get_running_loop()
-        loop.call_later(1, session.send_event, response_event)
+        data, errors = await self._create_task(open_session_event,
+                                               open_service_event,
+                                               response_event,
+                                               hist_send)
 
         index = pd.MultiIndex.from_tuples([
             (pd.Timestamp(dt.date(2018, 1, 1)), security_id),
@@ -160,11 +189,6 @@ class TestAsyncBloomberg:
                                      columns=[field_name],
                                      dtype=object)
 
-        data, errors = await bloomberg.get_historical_data([security_id],
-                                                           [field_name],
-                                                           dt.date(2018, 1, 1),
-                                                           dt.date(2018, 1, 5))
-
         assert errors == BloombergErrors()
 
         pd.testing.assert_frame_equal(expected_data, data)
@@ -173,17 +197,13 @@ class TestAsyncBloomberg:
                                   open_service_event):
         event = Event('RESPONSE', [field_search_msg])
 
-        bloomberg = AsyncBloomberg(max_sessions=1)
+        def search_send(bloomberg):
+            return bloomberg.search_fields('Price')
 
-        handler = bloomberg._choose_handler()
-        session = handler._session
-
-        session.send_event(open_session_event)
-        session.send_event(open_service_event)
-        loop = asyncio.get_running_loop()
-        loop.call_later(1, session.send_event, event)
-
-        data = await bloomberg.search_fields('Price')
+        data = await self._create_task(open_session_event,
+                                       open_service_event,
+                                       event,
+                                       search_send)
 
         expected_data = pd.DataFrame([['Theta Last Price', 'THETA_LAST',
                                        'Double']],
@@ -197,17 +217,13 @@ class TestAsyncBloomberg:
                                     open_session_event, security_lookup_msg):
         event = Event('RESPONSE', [security_lookup_msg])
 
-        bloomberg = AsyncBloomberg(max_sessions=1)
+        def lookup_send(bloomberg):
+            return bloomberg.security_lookup('Ford')
 
-        handler = bloomberg._choose_handler()
-        session = handler._session
-
-        session.send_event(open_session_event)
-        session.send_event(open_service_event)
-        loop = asyncio.get_running_loop()
-        loop.call_later(1, session.send_event, event)
-
-        data, _ = await bloomberg.security_lookup('Ford')
+        data, _ = await self._create_task(open_session_event,
+                                          open_service_event,
+                                          event,
+                                          lookup_send)
 
         expected_data = pd.DataFrame([['F US Equity', 'Ford Motors Co']],
                                      columns=['security', 'description'])
@@ -218,17 +234,13 @@ class TestAsyncBloomberg:
                                  open_session_event, curve_lookup_msg):
         event = Event('RESPONSE', [curve_lookup_msg])
 
-        bloomberg = AsyncBloomberg(max_sessions=1)
+        def curve_send(bloomberg: AsyncBloomberg):
+            return bloomberg.curve_lookup('Ford')
 
-        handler = bloomberg._choose_handler()
-        session = handler._session
-
-        session.send_event(open_session_event)
-        session.send_event(open_service_event)
-        loop = asyncio.get_running_loop()
-        loop.call_later(1, session.send_event, event)
-
-        data, _ = await bloomberg.curve_lookup('Ford')
+        data, _ = await self._create_task(open_session_event,
+                                          open_service_event,
+                                          event,
+                                          curve_send)
 
         expected_data = pd.DataFrame([['GOLD',
                                        'US',
@@ -256,17 +268,13 @@ class TestAsyncBloomberg:
                                       government_lookup_msg):
         event = Event('RESPONSE', [government_lookup_msg])
 
-        bloomberg = AsyncBloomberg(max_sessions=1)
+        def gov_send(bloomberg: AsyncBloomberg):
+            return bloomberg.government_lookup('Ford')
 
-        handler = bloomberg._choose_handler()
-        session = handler._session
-
-        session.send_event(open_session_event)
-        session.send_event(open_service_event)
-        loop = asyncio.get_running_loop()
-        loop.call_later(1, session.send_event, event)
-
-        data, _ = await bloomberg.government_lookup('Ford')
+        data, _ = await self._create_task(open_session_event,
+                                          open_service_event,
+                                          event,
+                                          gov_send)
 
         expected_data = pd.DataFrame([['T',
                                        'Treasuries',

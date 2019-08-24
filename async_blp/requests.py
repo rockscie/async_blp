@@ -3,7 +3,6 @@ Thus module contains wrappers for different types of Bloomberg requests
 """
 import asyncio
 import datetime as dt
-import uuid
 from collections import defaultdict
 from typing import Dict
 from typing import List
@@ -66,7 +65,7 @@ class ReferenceDataRequest(RequestBase):
 
         super().__init__(request_options, error_behavior, loop)
 
-        self._securities = securities
+        self.securities = securities
         self._fields = fields
         self._overrides = overrides or {}
         self._security_id_type = security_id_type
@@ -82,7 +81,7 @@ class ReferenceDataRequest(RequestBase):
         as security_ids.
         """
         data_frame = pd.DataFrame(columns=self._fields,
-                                  index=self._securities)
+                                  index=self.securities)
         errors = BloombergErrors()
 
         while True:
@@ -116,10 +115,13 @@ class ReferenceDataRequest(RequestBase):
         Approximate number of returned values; used to balance load
         between handlers
         """
-        return len(self._securities) * len(self._fields)
+        return len(self.securities) * len(self._fields)
 
 
 class HistoricalDataRequest(RequestBase):
+    """
+    parse historical response
+    """
     service_name = "//blp/refdata"
     request_name = 'HistoricalDataRequest'
 
@@ -203,31 +205,35 @@ class HistoricalDataRequest(RequestBase):
 
 
 class Subscription(ReferenceDataRequest):
+    """
+    Subscription for market data, parse response and save until async call
+    work only with one security
+    """
     service_name = '//blp/mktdata'
 
     def __init__(self,
-                 securities: List[str],
+                 security: str,
                  fields: List[str],
                  security_id_type: Optional[SecurityIdType] = None,
                  overrides: Optional[Dict] = None,
                  error_behavior: ErrorBehaviour = ErrorBehaviour.RETURN,
                  loop: asyncio.AbstractEventLoop = None,
                  ):
-        super().__init__(securities,
+        super().__init__([security],
                          fields,
                          security_id_type,
                          overrides,
                          error_behavior,
                          loop)
-        self._security_mapping = {blpapi.CorrelationId(uuid.uuid4()):
-                                      sec for sec in self._securities}
 
-    def create_subscription(self) -> blpapi.SubscriptionList:
+    def create_subscription(
+            self,
+            corr_id: blpapi.CorrelationId) -> blpapi.SubscriptionList:
         subscription = blpapi.SubscriptionList()
-        for cor_id, security in self._security_mapping.items():
+        for security in self.securities:
             subscription.add(security,
                              self._fields,
-                             correlationId=cor_id)
+                             correlationId=corr_id)
 
         return subscription
 
@@ -248,21 +254,16 @@ class Subscription(ReferenceDataRequest):
             LOGGER.debug('%s: waiting for messages', self.__class__.__name__)
             msg: blpapi.Message = self._msg_queue.get_nowait()
 
-            for cor_id in msg.correlationIds():
-                if cor_id not in self._security_mapping:
-                    continue
+            security_data_element = msg.asElement()
+            for field in security_data_element.elements():
+                try:
+                    field_name, field_value = parse_field_data(field)
+                    isin = self.securities[0]
+                    data[field_name][isin] = field_value
 
-                security_data_element = msg.asElement()
-                for field in security_data_element.elements():
-                    try:
-                        field_name, field_value = parse_field_data(field)
-                        isin = self._security_mapping[cor_id]
-                        data[field_name][isin] = field_value
-
-                    # pragma: no cover
-                    except blpapi.exception.IndexOutOfRangeException as ex:
-                        # todo check what is happening (field is empty)
-                        LOGGER.error(ex)
+                # pragma: no cover
+                except blpapi.exception.IndexOutOfRangeException as ex:
+                    LOGGER.error(ex)
 
         return pd.DataFrame(data)
 

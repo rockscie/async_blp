@@ -97,12 +97,6 @@ class RequestHandler(HandlerBase):
 
             for cor_id in msg.correlationIds():
 
-                # this is strictly for tests
-                if cor_id is None:  # pragma: no cover
-                    for request in self._current_requests.values():
-                        request.send_queue_message(msg)
-                    continue
-
                 request = self._current_requests[cor_id]
                 request.send_queue_message(msg)
 
@@ -132,7 +126,7 @@ class SubscriptionHandler(HandlerBase):
         super().__init__(session_options, loop)
 
         # only for typing
-        self._current_requests: Dict[str, Subscription] = {}
+        self._current_requests: Dict[blpapi.CorrelationId, Subscription] = {}
 
         local_methods = {
             blpapi.Event.SUBSCRIPTION_STATUS: self._subscriber_status_handler,
@@ -144,12 +138,10 @@ class SubscriptionHandler(HandlerBase):
     def _subscriber_data_handler(self, event_: blpapi.Event):
         """
         Redirect data to the request queue.
-
-        TODO: Currently, we just send all received data to all requests.
         """
         for msg in event_:
-            for request in self._current_requests.values():
-                request.send_queue_message(msg)
+            for cor_id in msg.correlationIds():
+                self._current_requests[cor_id].send_queue_message(msg)
 
     def _subscriber_status_handler(self, event_: blpapi.Event):
         """
@@ -170,19 +162,27 @@ class SubscriptionHandler(HandlerBase):
         await self.session_started.wait()
 
         for subscription in subscriptions:
-            corr_id = str(uuid.uuid4())
+            corr_id = blpapi.CorrelationId(str(uuid.uuid4()))
             self._current_requests[corr_id] = subscription
 
-            blp_subscription = subscription.create_subscription()
-            self._session.subscribe(blp_subscription, requestLabel=corr_id)
+            blp_subscription = subscription.create_subscription(corr_id)
+            self._session.subscribe(blp_subscription)
 
             LOGGER.debug('%s: subscription send:\n%s',
                          self.__class__.__name__,
                          blp_subscription)
 
-    async def read_subscribers(self):
-        tasks = [asyncio.create_task(request.process())
-                 for request in self._current_requests.values()]
+    async def read_subscribers(self, security_id: str = None):
+        """
+        You can check what are already come from Bloomberg
+        """
+        if security_id is None:
+            tasks = [asyncio.create_task(request.process())
+                     for request in self._current_requests.values()]
+        else:
+            tasks = [asyncio.create_task(request.process())
+                     for request in self._current_requests.values() if
+                     security_id in request.securities]
 
         requests_result = await asyncio.gather(*tasks)
         return requests_result

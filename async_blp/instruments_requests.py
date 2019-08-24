@@ -1,3 +1,7 @@
+"""
+This Request can search in bloomberg
+"""
+
 import asyncio
 from typing import Dict
 
@@ -18,6 +22,9 @@ LOGGER = log.get_logger()
 
 
 class InstrumentRequestBase(RequestBase):
+    """
+    all search requests have same response
+    """
     service_name = '//blp/instruments'
 
     response_fields = []
@@ -52,7 +59,6 @@ class InstrumentRequestBase(RequestBase):
 
             if msg is None:
                 break
-
             results = msg.getElement('results')
 
             for element in results.values():
